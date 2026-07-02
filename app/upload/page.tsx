@@ -48,7 +48,7 @@ export default function UploadPage() {
       return;
     }
 
-    const filePath = `${Date.now()}-${file.name}`;
+    const filePath = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_")}`;
 
     const { error: uploadError } = await supabase.storage
       .from("reports")
