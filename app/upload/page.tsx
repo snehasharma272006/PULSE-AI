@@ -66,10 +66,34 @@ export default function UploadPage() {
       .from("reports")
       .getPublicUrl(filePath);
 
+    // ===== NEW STEP: send the file to our AI route for analysis =====
+    let summary: string | null = null;
+
+    try {
+      const aiFormData = new FormData();
+      aiFormData.append("file", file);
+
+      const aiResponse = await fetch("/api/analyze-pdf", {
+        method: "POST",
+        body: aiFormData,
+      });
+
+      const aiData = await aiResponse.json();
+      summary = aiData.summary ?? null;
+
+      console.log("AI summary:", summary);
+    } catch (aiError) {
+      console.error("AI analysis failed:", aiError);
+      // Deliberately not stopping the upload if AI fails — the
+      // file is still safely saved even without a summary.
+    }
+    // ===== END NEW STEP =====
+
     const { error: insertError } = await supabase.from("reports").insert({
       user_id: user.id,
       file_url: urlData.publicUrl,
       file_name: file.name,
+      summary: summary,
     });
 
     console.log("Insert error:", insertError);

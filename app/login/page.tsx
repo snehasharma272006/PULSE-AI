@@ -34,8 +34,8 @@ export default function LoginPage() {
       if (error) {
         setError(error.message);
       } else {
-        setError("Check your email to confirm your account!");
-      }
+  router.push("/upload");
+}
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {

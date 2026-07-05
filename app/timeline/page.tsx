@@ -69,18 +69,27 @@ const events = [
 
 export default function TimelinePage() {
   return (
-    <main className="min-h-screen bg-black text-white px-6 py-12 max-w-2xl mx-auto">
+    <main
+      className="min-h-screen bg-black text-white px-6 py-12 max-w-2xl mx-auto"
+      style={{ fontFamily: "'Inter', sans-serif" }}
+    >
       <div className="mb-12">
-        <p className="text-sky-400 text-sm font-medium tracking-widest uppercase mb-2">
+        <p
+          className="text-sky-400 text-xs font-medium tracking-widest uppercase mb-2"
+          style={{ fontFamily: "'Inter', sans-serif", letterSpacing: "0.1em" }}
+        >
           Health History
         </p>
         <h1
-          className="text-4xl font-extrabold"
-          style={{ fontFamily: "'Syne', sans-serif" }}
+          className="text-3xl font-bold text-white"
+          style={{ fontFamily: "'Syne', sans-serif", letterSpacing: "-0.02em" }}
         >
           Your Timeline
         </h1>
-        <p className="text-slate-400 mt-2 text-sm">
+        <p
+          className="text-slate-400 mt-1 text-sm font-light"
+          style={{ fontFamily: "'Inter', sans-serif" }}
+        >
           Every event, visit, and result — in order.
         </p>
       </div>
@@ -88,10 +97,7 @@ export default function TimelinePage() {
       <div className="relative">
         <div
           className="absolute left-[11px] top-0 bottom-0"
-          style={{
-            width: "2px",
-            background: "rgba(56,189,248,0.4)",
-          }}
+          style={{ width: "2px", background: "rgba(56,189,248,0.4)" }}
         />
 
         {events.map((group) => (
@@ -106,8 +112,8 @@ export default function TimelinePage() {
                 }}
               />
               <span
-                className="text-sky-400 font-bold text-lg"
-                style={{ fontFamily: "'Syne', sans-serif" }}
+                className="text-sky-400 font-bold text-base"
+                style={{ fontFamily: "'Syne', sans-serif", letterSpacing: "-0.01em" }}
               >
                 {group.year}
               </span>
@@ -143,12 +149,20 @@ export default function TimelinePage() {
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3">
-                        <span className="text-2xl mt-0.5">{event.icon}</span>
+                        <span className="text-xl mt-0.5">{event.icon}</span>
                         <div>
-                          <p className="text-white font-semibold text-base leading-tight">
+                          <p
+                            className="text-white font-semibold text-sm leading-tight"
+                            style={{ fontFamily: "'Inter', sans-serif", letterSpacing: "-0.01em" }}
+                          >
                             {event.title}
                           </p>
-                          <p className="text-slate-400 text-sm mt-1">{event.subtitle}</p>
+                          <p
+                            className="text-slate-400 text-xs mt-1 font-light"
+                            style={{ fontFamily: "'Inter', sans-serif" }}
+                          >
+                            {event.subtitle}
+                          </p>
                         </div>
                       </div>
 
@@ -158,13 +172,20 @@ export default function TimelinePage() {
                           background: event.tagColor,
                           color: event.tagText,
                           border: `1px solid ${event.tagText}33`,
+                          fontFamily: "'Inter', sans-serif",
+                          fontWeight: 500,
                         }}
                       >
                         {event.tag}
                       </span>
                     </div>
 
-                    <p className="text-slate-600 text-xs mt-3 pl-9">{event.date}</p>
+                    <p
+                      className="text-slate-600 text-xs mt-3 pl-9 font-light"
+                      style={{ fontFamily: "'Inter', sans-serif" }}
+                    >
+                      {event.date}
+                    </p>
                   </div>
                 </div>
               ))}

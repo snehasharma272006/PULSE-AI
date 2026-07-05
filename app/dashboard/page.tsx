@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 
 type Report = {
   id: string;
   file_name: string;
+  file_url: string;
   created_at: string;
 };
 
 export default function DashboardPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchReports = async () => {
@@ -30,6 +33,32 @@ export default function DashboardPage() {
 
     fetchReports();
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-menu]")) {
+        setActiveMenu(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleView = (url: string) => {
+    window.open(url, "_blank");
+    setActiveMenu(null);
+  };
+
+  const handleDownload = async (url: string, fileName: string) => {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = fileName;
+    link.click();
+    setActiveMenu(null);
+  };
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -108,9 +137,7 @@ export default function DashboardPage() {
   return (
     <main className="min-h-screen bg-black text-white px-6 md:px-10 py-12 w-full max-w-7xl mx-auto">
       <div className="mb-10">
-        <p className="text-slate-500 text-sm mb-1 font-light tracking-wide">
-          {today}
-        </p>
+        <p className="text-slate-500 text-sm mb-1 font-light tracking-wide">{today}</p>
         <h1
           className="text-3xl font-bold text-white"
           style={{ fontFamily: "'Inter', sans-serif", letterSpacing: "-0.02em" }}
@@ -127,23 +154,13 @@ export default function DashboardPage() {
           <div
             key={m.label}
             className="rounded-2xl p-5 flex flex-col justify-between gap-3 transition-all duration-200"
-            style={{
-              minHeight: "140px",
-              background: m.accent,
-              border: `1px solid ${m.accentStroke}`,
-            }}
+            style={{ minHeight: "140px", background: m.accent, border: `1px solid ${m.accentStroke}` }}
           >
-            <div
-              className="w-10 h-10 rounded-lg flex items-center justify-center"
-              style={{ background: "rgba(0,0,0,0.3)" }}
-            >
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "rgba(0,0,0,0.3)" }}>
               {m.icon}
             </div>
             <div>
-              <p
-                className="text-3xl font-bold"
-                style={{ color: m.accentText, letterSpacing: "-0.02em" }}
-              >
+              <p className="text-3xl font-bold" style={{ color: m.accentText, letterSpacing: "-0.02em" }}>
                 {m.value}
               </p>
               <p className="text-sm text-slate-400 mt-1">{m.label}</p>
@@ -157,11 +174,8 @@ export default function DashboardPage() {
           Recent Activity
         </h2>
         <div
-          className="rounded-2xl overflow-hidden w-full"
-          style={{
-            background: "rgba(255,255,255,0.02)",
-            border: "1px solid rgba(255,255,255,0.07)",
-          }}
+          className="rounded-2xl overflow-visible w-full"
+          style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)" }}
         >
           {loading ? (
             <p className="text-slate-600 text-sm px-5 py-4">Loading...</p>
@@ -171,12 +185,9 @@ export default function DashboardPage() {
             reports.slice(0, 5).map((report, i) => (
               <div
                 key={report.id}
-                className="flex items-center gap-4 px-5 py-4 hover:bg-sky-500/5 transition-colors"
+                className="flex items-center gap-4 px-5 py-4 hover:bg-sky-500/5 transition-colors relative"
                 style={{
-                  borderBottom:
-                    i < Math.min(reports.length, 5) - 1
-                      ? "1px solid rgba(255,255,255,0.05)"
-                      : "none",
+                  borderBottom: i < Math.min(reports.length, 5) - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
                 }}
               >
                 <div
@@ -189,11 +200,63 @@ export default function DashboardPage() {
                     <line x1="12" y1="3" x2="12" y2="15" />
                   </svg>
                 </div>
+
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-white">Report Uploaded</p>
                   <p className="text-xs text-slate-500 mt-1 truncate">{report.file_name}</p>
                 </div>
+
                 <p className="text-xs text-slate-600 flex-shrink-0">{formatTime(report.created_at)}</p>
+
+                <button
+                  data-menu="true"
+                  onClick={() => setActiveMenu(activeMenu === report.id ? null : report.id)}
+                  className="ml-2 w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 hover:bg-white/10 transition-colors"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="white" opacity="0.4">
+                    <circle cx="12" cy="5" r="1.5" />
+                    <circle cx="12" cy="12" r="1.5" />
+                    <circle cx="12" cy="19" r="1.5" />
+                  </svg>
+                </button>
+
+                {activeMenu === report.id && (
+                  <div
+                    data-menu="true"
+                    ref={menuRef}
+                    className="absolute right-4 top-12 z-50 rounded-xl overflow-hidden shadow-2xl"
+                    style={{
+                      background: "#1a1a1a",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      minWidth: "150px",
+                    }}
+                  >
+                    <button
+                      data-menu="true"
+                      onClick={() => handleView(report.file_url)}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-white/10 transition-colors"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="2">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                      View
+                    </button>
+                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }} />
+                    <button
+                      data-menu="true"
+                      onClick={() => handleDownload(report.file_url, report.file_name)}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-white/10 transition-colors"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                      Download
+                    </button>
+                  </div>
+                )}
               </div>
             ))
           )}
