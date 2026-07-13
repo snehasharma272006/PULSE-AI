@@ -8,12 +8,14 @@ type Report = {
   file_name: string;
   file_url: string;
   created_at: string;
+  summary: string | null;
 };
 
 export default function DashboardPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -75,6 +77,9 @@ export default function DashboardPage() {
     return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
   };
 
+  // NEW: count reports that actually have a summary
+  const insightsCount = reports.filter((r) => r.summary).length;
+
   const metrics = [
     {
       label: "Reports Uploaded",
@@ -116,7 +121,7 @@ export default function DashboardPage() {
     },
     {
       label: "Insights Generated",
-      value: "—",
+      value: loading ? "..." : String(insightsCount), // NEW: real data instead of "—"
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="1.8">
           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
@@ -185,76 +190,109 @@ export default function DashboardPage() {
             reports.slice(0, 5).map((report, i) => (
               <div
                 key={report.id}
-                className="flex items-center gap-4 px-5 py-4 hover:bg-sky-500/5 transition-colors relative"
                 style={{
                   borderBottom: i < Math.min(reports.length, 5) - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
                 }}
               >
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: "rgba(255,255,255,0.05)" }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="17 8 12 3 7 8" />
-                    <line x1="12" y1="3" x2="12" y2="15" />
-                  </svg>
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white">Report Uploaded</p>
-                  <p className="text-xs text-slate-500 mt-1 truncate">{report.file_name}</p>
-                </div>
-
-                <p className="text-xs text-slate-600 flex-shrink-0">{formatTime(report.created_at)}</p>
-
-                <button
-                  data-menu="true"
-                  onClick={() => setActiveMenu(activeMenu === report.id ? null : report.id)}
-                  className="ml-2 w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 hover:bg-white/10 transition-colors"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="white" opacity="0.4">
-                    <circle cx="12" cy="5" r="1.5" />
-                    <circle cx="12" cy="12" r="1.5" />
-                    <circle cx="12" cy="19" r="1.5" />
-                  </svg>
-                </button>
-
-                {activeMenu === report.id && (
+                <div className="flex items-center gap-4 px-5 py-4 hover:bg-sky-500/5 transition-colors relative">
                   <div
-                    data-menu="true"
-                    ref={menuRef}
-                    className="absolute right-4 top-12 z-50 rounded-xl overflow-hidden shadow-2xl"
-                    style={{
-                      background: "#1a1a1a",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      minWidth: "150px",
-                    }}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: "rgba(255,255,255,0.05)" }}
                   >
-                    <button
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white">Report Uploaded</p>
+                    <p className="text-xs text-slate-500 mt-1 truncate">{report.file_name}</p>
+
+                    {/* NEW: only show this button if a summary actually exists */}
+                    {report.summary && (
+                      <button
+                        onClick={() => setExpandedId(expandedId === report.id ? null : report.id)}
+                        className="text-xs text-sky-400 mt-1.5 hover:text-sky-300 transition-colors flex items-center gap-1"
+                      >
+                        {expandedId === report.id ? "Hide AI Summary" : "View AI Summary"}
+                        <svg
+                          width="10" height="10" viewBox="0 0 24 24" fill="none"
+                          stroke="currentColor" strokeWidth="3"
+                          style={{
+                            transform: expandedId === report.id ? "rotate(180deg)" : "rotate(0deg)",
+                            transition: "transform 0.2s",
+                          }}
+                        >
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-slate-600 flex-shrink-0">{formatTime(report.created_at)}</p>
+
+                  <button
+                    data-menu="true"
+                    onClick={() => setActiveMenu(activeMenu === report.id ? null : report.id)}
+                    className="ml-2 w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 hover:bg-white/10 transition-colors"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="white" opacity="0.4">
+                      <circle cx="12" cy="5" r="1.5" />
+                      <circle cx="12" cy="12" r="1.5" />
+                      <circle cx="12" cy="19" r="1.5" />
+                    </svg>
+                  </button>
+
+                  {activeMenu === report.id && (
+                    <div
                       data-menu="true"
-                      onClick={() => handleView(report.file_url)}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-white/10 transition-colors"
+                      ref={menuRef}
+                      className="absolute right-4 top-12 z-50 rounded-xl overflow-hidden shadow-2xl"
+                      style={{
+                        background: "#1a1a1a",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        minWidth: "150px",
+                      }}
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="2">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                        <circle cx="12" cy="12" r="3" />
-                      </svg>
-                      View
-                    </button>
-                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }} />
-                    <button
-                      data-menu="true"
-                      onClick={() => handleDownload(report.file_url, report.file_name)}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-white/10 transition-colors"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                        <polyline points="7 10 12 15 17 10" />
-                        <line x1="12" y1="15" x2="12" y2="3" />
-                      </svg>
-                      Download
-                    </button>
+                      <button
+                        data-menu="true"
+                        onClick={() => handleView(report.file_url)}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-white/10 transition-colors"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="2">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                        View
+                      </button>
+                      <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }} />
+                      <button
+                        data-menu="true"
+                        onClick={() => handleDownload(report.file_url, report.file_name)}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-white/10 transition-colors"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Download
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* NEW: the expandable summary panel itself */}
+                {expandedId === report.id && report.summary && (
+                  <div
+                    className="px-5 pb-4 -mt-1"
+                    style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}
+                  >
+                    <p className="text-xs text-slate-400 leading-relaxed mt-3 whitespace-pre-line">
+                      {report.summary}
+                    </p>
                   </div>
                 )}
               </div>
