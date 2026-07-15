@@ -14,14 +14,34 @@ export default function LoginPage() {
 
   const handleSubmit = async () => {
     setError("");
+
+    const trimmedEmail = email.trim();
+
+    // Basic client-side sanity checks before hitting the network
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
+    if (!isForgot && password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
     setLoading(true);
 
+    // Use whatever domain the app is actually running on —
+    // works correctly on localhost AND after deployment, automatically
+    const redirectBase =
+      typeof window !== "undefined" ? window.location.origin : "";
+
     if (isForgot) {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: "http://localhost:3000/auth/reset",
+      const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+        redirectTo: `${redirectBase}/auth/reset`,
       });
       if (error) {
-        setError(error.message);
+        // Deliberately generic — never confirm whether this email exists
+        setError("If that email is registered, you'll receive a reset link.");
       } else {
         setError("✅ Recovery email sent! Check your inbox.");
       }
@@ -30,16 +50,29 @@ export default function LoginPage() {
     }
 
     if (isSignUp) {
-      const { error } = await supabase.auth.signUp({ email, password });
+      const { error } = await supabase.auth.signUp({
+        email: trimmedEmail,
+        password,
+      });
       if (error) {
-        setError(error.message);
+        // Generalize the error so it never confirms "this email already exists"
+        if (error.message.toLowerCase().includes("already registered")) {
+          setError("Unable to create account with these details.");
+        } else {
+          setError(error.message);
+        }
       } else {
-  router.push("/upload");
-}
+        router.push("/upload");
+      }
     } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { error } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password,
+      });
       if (error) {
-        setError(error.message);
+        // Supabase already returns a generic message here by default,
+        // but we normalize it explicitly to be safe either way
+        setError("Incorrect email or password.");
       } else {
         router.push("/upload");
       }
@@ -57,6 +90,8 @@ export default function LoginPage() {
       <input
         className="bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2 w-72 text-white"
         placeholder="Email"
+        type="email"
+        autoComplete="email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
       />
@@ -66,6 +101,7 @@ export default function LoginPage() {
           className="bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2 w-72 text-white"
           placeholder="Password"
           type="password"
+          autoComplete={isSignUp ? "new-password" : "current-password"}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
