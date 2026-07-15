@@ -91,7 +91,7 @@ export default function TimelinePage() {
 
   return (
     <main
-      className="min-h-screen bg-black text-white px-6 py-12 max-w-2xl mx-auto"
+      className="min-h-screen bg-black text-white px-4 sm:px-6 py-8 sm:py-12 max-w-2xl mx-auto"
       style={{ fontFamily: "'Inter', sans-serif" }}
     >
       <div className="mb-12">
@@ -114,6 +114,8 @@ export default function TimelinePage() {
           Every event, visit, and result — in order.
         </p>
       </div>
+
+      <div style={{ height: "32px" }} />
 
       {loading ? (
         <p className="text-slate-600 text-sm">Loading...</p>

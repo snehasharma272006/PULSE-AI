@@ -77,7 +77,6 @@ export default function DashboardPage() {
     return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
   };
 
-  // NEW: count reports that actually have a summary
   const insightsCount = reports.filter((r) => r.summary).length;
 
   const metrics = [
@@ -121,7 +120,7 @@ export default function DashboardPage() {
     },
     {
       label: "Insights Generated",
-      value: loading ? "..." : String(insightsCount), // NEW: real data instead of "—"
+      value: loading ? "..." : String(insightsCount),
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="1.8">
           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
@@ -140,11 +139,11 @@ export default function DashboardPage() {
   });
 
   return (
-    <main className="min-h-screen bg-black text-white px-6 md:px-10 py-12 w-full max-w-7xl mx-auto">
-      <div className="mb-10">
+    <main className="min-h-screen bg-black text-white px-4 sm:px-6 md:px-10 py-8 sm:py-12 w-full max-w-7xl mx-auto">
+      <div className="mb-8 sm:mb-10">
         <p className="text-slate-500 text-sm mb-1 font-light tracking-wide">{today}</p>
         <h1
-          className="text-3xl font-bold text-white"
+          className="text-2xl sm:text-3xl font-bold text-white"
           style={{ fontFamily: "'Inter', sans-serif", letterSpacing: "-0.02em" }}
         >
           Welcome back
@@ -154,25 +153,29 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-6 mb-10 w-full">
+      {/* Responsive metric grid: 2 columns on phone, 4 columns from medium screens up */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-12 sm:mb-14 w-full">
         {metrics.map((m) => (
           <div
             key={m.label}
-            className="rounded-2xl p-5 flex flex-col justify-between gap-3 transition-all duration-200"
-            style={{ minHeight: "140px", background: m.accent, border: `1px solid ${m.accentStroke}` }}
+            className="rounded-2xl p-4 sm:p-5 flex flex-col justify-between gap-3 transition-all duration-200"
+            style={{ minHeight: "130px", background: m.accent, border: `1px solid ${m.accentStroke}` }}
           >
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "rgba(0,0,0,0.3)" }}>
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center" style={{ background: "rgba(0,0,0,0.3)" }}>
               {m.icon}
             </div>
             <div>
-              <p className="text-3xl font-bold" style={{ color: m.accentText, letterSpacing: "-0.02em" }}>
+              <p className="text-2xl sm:text-3xl font-bold" style={{ color: m.accentText, letterSpacing: "-0.02em" }}>
                 {m.value}
               </p>
-              <p className="text-sm text-slate-400 mt-1">{m.label}</p>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1">{m.label}</p>
             </div>
           </div>
         ))}
       </div>
+
+  {/* Explicit spacer — sidesteps margin-collapsing entirely, guarantees real gap */}
+      <div style={{ height: "48px" }} />
 
       <div className="w-full">
         <h2 className="text-xs font-medium text-slate-500 uppercase tracking-widest mb-4">
@@ -194,7 +197,7 @@ export default function DashboardPage() {
                   borderBottom: i < Math.min(reports.length, 5) - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
                 }}
               >
-                <div className="flex items-center gap-4 px-5 py-4 hover:bg-sky-500/5 transition-colors relative">
+                <div className="flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 hover:bg-sky-500/5 transition-colors relative">
                   <div
                     className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
                     style={{ background: "rgba(255,255,255,0.05)" }}
@@ -210,7 +213,6 @@ export default function DashboardPage() {
                     <p className="text-sm font-medium text-white">Report Uploaded</p>
                     <p className="text-xs text-slate-500 mt-1 truncate">{report.file_name}</p>
 
-                    {/* NEW: only show this button if a summary actually exists */}
                     {report.summary && (
                       <button
                         onClick={() => setExpandedId(expandedId === report.id ? null : report.id)}
@@ -231,12 +233,12 @@ export default function DashboardPage() {
                     )}
                   </div>
 
-                  <p className="text-xs text-slate-600 flex-shrink-0">{formatTime(report.created_at)}</p>
+                  <p className="hidden sm:block text-xs text-slate-600 flex-shrink-0">{formatTime(report.created_at)}</p>
 
                   <button
                     data-menu="true"
                     onClick={() => setActiveMenu(activeMenu === report.id ? null : report.id)}
-                    className="ml-2 w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 hover:bg-white/10 transition-colors"
+                    className="ml-1 sm:ml-2 w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 hover:bg-white/10 transition-colors"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="white" opacity="0.4">
                       <circle cx="12" cy="5" r="1.5" />
@@ -249,7 +251,7 @@ export default function DashboardPage() {
                     <div
                       data-menu="true"
                       ref={menuRef}
-                      className="absolute right-4 top-12 z-50 rounded-xl overflow-hidden shadow-2xl"
+                      className="absolute right-2 sm:right-4 top-12 z-50 rounded-xl overflow-hidden shadow-2xl"
                       style={{
                         background: "#1a1a1a",
                         border: "1px solid rgba(255,255,255,0.1)",
@@ -284,15 +286,19 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                {/* NEW: the expandable summary panel itself */}
                 {expandedId === report.id && report.summary && (
-                  <div
-                    className="px-5 pb-4 -mt-1"
-                    style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}
-                  >
-                    <p className="text-xs text-slate-400 leading-relaxed mt-3 whitespace-pre-line">
-                      {report.summary}
-                    </p>
+                  <div className="px-4 sm:px-5 pb-4 -mt-1">
+                    <div
+                      className="rounded-xl p-4 mt-3"
+                      style={{
+                        background: "#ffffff",
+                        boxShadow: "0 4px 20px rgba(0,0,0,0.25)",
+                      }}
+                    >
+                      <p className="text-xs text-slate-800 leading-relaxed whitespace-pre-line">
+                        {report.summary}
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
