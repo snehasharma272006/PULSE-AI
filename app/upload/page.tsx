@@ -74,7 +74,10 @@ export default function UploadPage() {
       const aiFormData = new FormData();
       aiFormData.append("file", file);
 
-      const aiResponse = await fetch("/api/analyze-pdf", {
+      const isImage = file.type.startsWith("image/");
+      const endpoint = isImage ? "/api/analyze-image" : "/api/analyze-pdf";
+
+      const aiResponse = await fetch(endpoint, {
         method: "POST",
         body: aiFormData,
       });

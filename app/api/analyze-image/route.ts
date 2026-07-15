@@ -1,6 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
-import { extractText, getDocumentProxy } from "unpdf";
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,16 +11,15 @@ export async function POST(req: NextRequest) {
     }
 
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = new Uint8Array(arrayBuffer);
+    const buffer = Buffer.from(arrayBuffer);
 
-    // NEW: unpdf's two-step process — load the document, then extract its text
-    const pdf = await getDocumentProxy(buffer);
-    const { text: extractedText } = await extractText(pdf, { mergePages: true });
+    // Convert the image into Base64 text format so it can travel in the request
+    const base64Image = buffer.toString("base64");
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-const prompt = `You are explaining a medical report to a worried patient or their family member who has no medical background. Do not simply restate the numbers and values from the report — that's what the report already shows them.
+    const prompt = `You are explaining a medical report to a worried patient or their family member who has no medical background. Do not simply restate the numbers and values from the report — that's what the report already shows them.
 
 Instead:
 - Start with one sentence: overall, is this reassuring, or does something need attention?
@@ -29,15 +27,22 @@ Instead:
 - Use simple comparisons or analogies where helpful
 - Clearly separate "Nothing to worry about" from "Worth discussing with your doctor"
 - Avoid medical jargon; if you must use a technical term, immediately explain it in parentheses
-- Keep it warm and reassuring in tone, but honest — don't hide anything genuinely concerning
+- Keep it warm and reassuring in tone, but honest — don't hide anything genuinely concerning`;
 
-Here is the report content:\n\n${extractedText}`;    const result = await model.generateContent(prompt);
+    // Send both the image data AND our instruction together
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          data: base64Image,
+          mimeType: file.type,
+        },
+      },
+      prompt,
+    ]);
+
     const summary = result.response.text();
 
-    return NextResponse.json({
-      extractedTextPreview: extractedText.slice(0, 300),
-      summary,
-    });
+    return NextResponse.json({ summary });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
