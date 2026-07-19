@@ -9,7 +9,6 @@ const supabase = createClient(
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-// Lazy load transformers for embedding
 let pipeline: any = null;
 
 async function getEmbeddingModel() {
@@ -50,7 +49,6 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dotProduct / (normA * normB);
 }
 
-// RAG search function
 async function searchRelevantChunks(
   query: string,
   userId: string,
@@ -101,7 +99,6 @@ async function searchRelevantChunks(
 
 export async function POST(req: NextRequest) {
   try {
-    // Get auth
     const authHeader = req.headers.get("authorization");
     if (!authHeader) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -117,7 +114,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid authentication" }, { status: 401 });
     }
 
-    // Get request body
     const { question, reportId } = await req.json();
 
     if (!question) {
@@ -147,19 +143,65 @@ Instructions:
 User's question: ${question}`;
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    const result = await model.generateContent(prompt);
-    const answer = result.response.text();
+    
+    // Use streaming
+    const stream = await model.generateContentStream(prompt);
 
-    return NextResponse.json({
-      answer,
-      citations: relevantChunks.slice(0, 3).map((chunk, idx) => ({
-        text: chunk.text.substring(0, 100) + "...",
-        page: chunk.pageNumber,
-        reportId: chunk.reportId,
-      })),
+    // Create readable stream
+    const customReadable = new ReadableStream({
+      async start(controller) {
+        try {
+          let fullResponse = "";
+
+          // Stream the response chunks
+          for await (const chunk of stream.stream) {
+            const text = chunk.text();
+            fullResponse += text;
+
+            // Send each chunk as SSE
+            controller.enqueue(
+              new TextEncoder().encode(
+                `data: ${JSON.stringify({ type: "content", text })}\n\n`
+              )
+            );
+          }
+
+          // Send citations at the end
+          const citations = relevantChunks.slice(0, 3).map((chunk, idx) => ({
+            text: chunk.text.substring(0, 100) + "...",
+            page: chunk.pageNumber,
+            reportId: chunk.reportId,
+          }));
+
+          controller.enqueue(
+            new TextEncoder().encode(
+              `data: ${JSON.stringify({ type: "citations", citations })}\n\n`
+            )
+          );
+
+          controller.enqueue(
+            new TextEncoder().encode(`data: ${JSON.stringify({ type: "done" })}\n\n`)
+          );
+
+          controller.close();
+        } catch (error) {
+          controller.error(error);
+        }
+      },
+    });
+
+    return new NextResponse(customReadable, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
     });
   } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
+    console.error("Chat error:", error);
+    return NextResponse.json(
+      { error: `Internal server error: ${(error as any).message}` },
+      { status: 500 }
+    );
   }
 }
