@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
- const PDFParse = require('pdf-parse');
+ const pdfParse = require('pdf-parse');
 // Initialize Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
