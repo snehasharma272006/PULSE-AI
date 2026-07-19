@@ -1,12 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import * as pdfjsLib from 'pdfjs-dist';
 
-// Set up PDF.js worker
-if (typeof window === 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-}
-
+const pdfParse = require('pdf-parse/lib/pdf-parse');
 // Initialize Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,7 +18,7 @@ interface ProcessResponse {
 }
 
 // Smart chunking logic
-function smartChunk(text: string, chunkSize: number = 500, overlap: number = 100): string[] {
+function smartChunk(text: string, chunkSize: number = 500): string[] {
   const chunks: string[] = [];
   let currentPos = 0;
 
@@ -52,23 +47,6 @@ function smartChunk(text: string, chunkSize: number = 500, overlap: number = 100
   }
 
   return chunks;
-}
-
-// Extract text from PDF
-async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
-  const pdf = await pdfjsLib.getDocument({ data: pdfBuffer }).promise;
-  let fullText = '';
-
-  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items
-      .map((item: any) => item.str)
-      .join(' ');
-    fullText += `[Page ${pageNum}]\n${pageText}\n\n`;
-  }
-
-  return fullText;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<ProcessResponse>> {
@@ -114,12 +92,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
       );
     }
 
-    const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
+    const pdfBuffer = await pdfResponse.arrayBuffer();
 
     // Extract text from PDF
     let extractedText: string;
     try {
-      extractedText = await extractTextFromPDF(pdfBuffer);
+      const pdfData = await pdfParse(Buffer.from(pdfBuffer));
+      extractedText = pdfData.text;
+
+      if (!extractedText || extractedText.trim().length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'No text found in PDF. Try a text-based PDF.' },
+          { status: 400 }
+        );
+      }
     } catch (pdfError) {
       console.error('PDF extraction error:', pdfError);
       return NextResponse.json(
@@ -144,7 +130,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
       report_id: reportId,
       text: chunk,
       chunk_index: index,
-      page_number: 1, // We'll parse this better later
+      page_number: 1,
     }));
 
     const { data: insertedChunks, error: insertError } = await supabase
