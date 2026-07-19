@@ -1,147 +1,388 @@
+ulse AI - Health Timeline AI 🏥
 
-# Pulse AI — Your Personal Health Intelligence Layer
+AI-powered medical record management with semantic search, streaming chat, and health trends visualization.
+🚀 Features
 
-An AI-powered health timeline and chat application that transforms scattered medical reports into a single, chronological, intelligent health record — built with a futuristic glassmorphism aesthetic.
-
-## Table of Contents
-
-- [Project Overview](#project-overview)
-- [Key Features](#key-features)
-- [Tech Stack](#tech-stack)
-- [UI / UX Highlights](#ui--ux-highlights)
-- [System Architecture](#system-architecture)
-- [Folder Structure](#folder-structure)
-- [How It Works](#how-it-works)
-- [Environment Variables](#environment-variables)
-- [Roadmap](#roadmap)
+RAG System (Retrieval-Augmented Generation)
 
 
-## Project Overview
+PDF Upload & Storage - Secure file upload to Supabase
+Smart Text Extraction - Intelligent chunking (breaks at sentences, not mid-word)
+Local Embeddings - 384-dimensional vectors via Sentence-Transformers (no API calls)
+Semantic Search - pgvector similarity search with cosine distance
+Source Citations - AI responses include exact sources + page numbers
 
-Most people have their health records scattered everywhere — PDFs in email, handwritten prescriptions, lab reports from different hospitals. Pulse AI solves this.
 
-You upload your medical documents. Our AI reads them, extracts the key information, and builds you a clean, chronological health timeline — so you can actually understand your own health history at a glance.
+Streaming Chat
 
-**Who it's for**
-- Anyone who wants to understand their own health history
-- People managing chronic conditions who need to track changes over time
-- Patients who switch doctors frequently and need a consolidated record
 
-**Why it exists**
-- Medical reports are written for doctors, not patients — jargon-heavy, hard to parse
-- There's no single place to see your entire health journey in order
-- AI can bridge that gap — reading the documents *for* you and presenting insights in plain language
+Real-time Typing Effect - Watch responses stream in like ChatGPT
+RAG Context - Automatically finds relevant health records
+Citation Cards - See exactly where the AI got its information
+Multi-report Support - Chat about specific or all reports
 
-**Value proposition**
-- Upload any health document → AI extracts the data → your entire health history is organized, searchable, and understandable.
 
-## Key Features
+Health Trends
 
-- **AI-Powered Document Parsing**
-  - Upload PDFs or images of lab reports, prescriptions, diagnoses
-  - OpenAI extracts structured health data automatically — no manual entry
-- **Personal Health Dashboard**
-  - See at a glance: Reports uploaded, Medical events, Conditions tracked, Insights generated
-- **Chronological Health Timeline**
-  - Every event — lab report, appointment, prescription change, diagnosis — displayed in order
-  - Color-coded tags (Lab Report, Prescription, Diagnosis, Appointment) for fast scanning
-- **AI Health Chat** *(coming soon)*
-  - Ask questions about your own health history in plain English
-  - "When did my HbA1c first go borderline high?" — and get an instant answer
-- **Secure by Design**
-  - Supabase handles authentication and data storage
-  - Health data stays tied to the authenticated user only
 
----
+Interactive Charts - Bar graphs of metrics over time
+Auto-Detection - Parses cholesterol, blood pressure, weight, HbA1c from reports
+Stats Summary - Latest value, average, and change indicators
+Comparison - Side-by-side report comparison with trend arrows
 
-## Tech Stack
 
-| **Frontend** | Next.js 15 (App Router), TypeScript, Tailwind CSS |
-| **AI / Intelligence** | OpenAI GPT-4o (document parsing & insights) |
-| **Database & Auth** | Supabase (PostgreSQL + Auth) |
-| **Styling** | Glassmorphism design system, custom Tailwind config |
-| **Deployment** | Vercel *(coming soon)* |
+Production Ready
 
-## UI / UX Highlights
 
-- **Glassmorphism Aesthetic:** 
-- **Responsive Layout:** Works cleanly across screen sizes
-- **Real-time Feedback:** Loading states and activity indicators throughout the dashboard
+Type Safety - Full TypeScript coverage
+Jest Tests - Automated test suite
+GitHub Actions - CI/CD on every push
+Error Handling - Graceful failures + user feedback
+Authentication - Supabase Auth with RLS
 
-## System Architecture
 
-  A["User uploads PDF / Image"] --> B["Next.js API Route"]
-  B --> C["OpenAI GPT-4o\n(Extract health data)"]
-  C --> D["Structured JSON\n(event type, date, details)"]
-  D --> E[("Supabase Database")]
-  E --> F["Dashboard\n(Stats + Recent Activity)"]
-  E --> G["Timeline\n(Chronological events)"]
-  E --> H["AI Chat\n(Coming Soon)"]
 
-## Folder Structure
+💰 Zero Cost Tech Stack
+
+ComponentTechCostFrontendNext.js 15 + React 19FreeBackendNext.js API RoutesFreeDatabaseSupabase (PostgreSQL + pgvector)Free tierAuthSupabase AuthFree tierStorageSupabase StorageFree tierEmbeddingsSentence-Transformers (local)FreeLLMGoogle Gemini 2.5 FlashFree tier (60k req/day)HostingVercelFree tierTOTAL$0
+
+
+🎯 Quick Start
+
+Prerequisites
+
+
+Node.js 18+
+Supabase account (free)
+Google Gemini API key (free)
+
+
+Installation
+
+bash# Clone repo
+git clone https://github.com/YOUR_USERNAME/pulse-ai.git
+cd pulse-ai
+
+# Install dependencies
+npm install
+
+# Create .env.local
+cat > .env.local << EOF
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+GEMINI_API_KEY=your_gemini_api_key
+EOF
+
+# Run dev server
+npm run dev
+
+Visit http://localhost:3000/dashboard
+
+
+📋 Database Setup
+
+Create Tables (SQL)
+
+sqlCREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id),
+  file_name TEXT NOT NULL,
+  file_url TEXT NOT NULL,
+  extracted_text TEXT,
+  created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE report_chunks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id),
+  report_id UUID NOT NULL REFERENCES reports(id),
+  text TEXT NOT NULL,
+  embedding vector(384),
+  page_number INT,
+  chunk_index INT,
+  created_at TIMESTAMP DEFAULT now()
+);
+
+-- Enable RLS
+ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE report_chunks ENABLE ROW LEVEL SECURITY;
+
+-- Policies
+CREATE POLICY "users_access_own_reports" 
+  ON reports FOR ALL USING (auth.uid() = user_id);
+  
+CREATE POLICY "users_access_own_chunks" 
+  ON report_chunks FOR ALL USING (auth.uid() = user_id);
+
+-- Index for fast search
+CREATE INDEX ON report_chunks USING ivfflat 
+  (embedding vector_cosine_ops);
+
+Storage Bucket
+
+
+Supabase Dashboard → Storage
+Create bucket: medical-reports
+Set to Private
+
+
+
+🔌 API Routes
+
+EndpointMethodPurpose/api/uploadPOSTUpload PDF file/api/process-pdfPOSTExtract text + chunk/api/generate-embeddingsPOSTGenerate vectors/api/searchPOSTSemantic search/api/chatPOSTStreaming AI chat
+
+Example: Upload & Chat
+
+typescript// 1. Upload
+const uploadRes = await fetch('/api/upload', {
+  method: 'POST',
+  body: formData,
+  headers: { Authorization: `Bearer ${token}` },
+});
+const { reportId } = await uploadRes.json();
+
+// 2. Process
+await fetch('/api/process-pdf', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  },
+  body: JSON.stringify({ reportId, fileUrl }),
+});
+
+// 3. Chat
+const chatRes = await fetch('/api/chat', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${token}` },
+  body: JSON.stringify({ question: 'Why did my cholesterol drop?', reportId }),
+});
+
+// 4. Read streaming response
+const reader = chatRes.body.getReader();
+const decoder = new TextDecoder();
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  const chunk = decoder.decode(value);
+  // Stream chunks to UI
+}
+
+
+🧪 Testing
+
+bash# Run all tests
+npm test
+
+# Watch mode
+npm run test:watch
+
+# Coverage report
+npm run test:coverage
+
+GitHub Actions runs tests on every push.
+
+
+📦 Project Structure
+
 pulse-ai/
-├─ app/
-│  ├─ (auth)/              # Authentication routes
-│  ├─ dashboard/           # Dashboard page
-│  ├─ timeline/            # Health timeline page
-│  ├─ upload/              # Document upload page
-│  ├─ chat/                # AI Chat page (in progress)
-│  └─ page.tsx             # Landing page
-├─ components/
-│  ├─ ui/                  # Reusable UI components
-│  ├─ dashboard/           # Dashboard-specific components
-│  └─ timeline/            # Timeline-specific components
-├─ lib/
-│  ├─ supabase/            # Supabase client & helpers
-│  └─ openai/              # OpenAI integration
-├─ public/                 # Static assets
-└─ .env.local              # Environment variables
-
----
-
-## How It Works
-
-**Standard health apps** ask you to manually enter your data. Pulse AI does the opposite.
-
-Upload a PDF  →  AI reads it  →  Timeline updates  →  You understand your health
-
-**Step 1 — Upload**
-The user uploads a PDF or image of any health document — lab report, prescription, hospital discharge summary, anything.
-
-**Step 2 — AI Extraction**
-The document is sent to OpenAI GPT-4o with a structured prompt. The AI identifies: event type, date, key findings, doctor/hospital name, and any critical values.
-
-**Step 3 — Storage**
-The extracted structured data is saved to Supabase, linked to the authenticated user's account.
-
-**Step 4 — Timeline**
-The health timeline automatically updates — chronologically ordered, tagged by category, human-readable.
+├── app/
+│   ├── api/
+│   │   ├── upload/route.ts
+│   │   ├── process-pdf/route.ts
+│   │   ├── generate-embeddings/route.ts
+│   │   ├── search/route.ts
+│   │   └── chat/route.ts
+│   └── dashboard/
+│       └── page.tsx
+├── components/
+│   ├── UploadForm.tsx
+│   ├── ChatUI.tsx
+│   ├── ReportsList.tsx
+│   ├── TrendsChart.tsx
+│   └── ReportComparison.tsx
+├── hooks/
+│   └── useAuth.ts
+├── __tests__/
+│   └── api/upload.test.ts
+├── .github/
+│   └── workflows/test.yml
+├── jest.config.js
+├── jest.setup.js
+└── DEPLOYMENT.md
 
 
-## Environment Variables
+🚀 Deployment
 
-Copy `.env.example` to `.env.local`.
-
-```env
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-
-# OpenAI
-OPENAI_API_KEY=your_openai_api_key
-
-| Variable | Purpose |
-| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public key for Supabase client |
-| `OPENAI_API_KEY` | OpenAI API key for document parsing |
+Deploy on Vercel (Free)
 
 
-## Roadmap
-| Feature | Status |
-| Landing Page | complete |
-| Document Upload + AI Parsing | complete |
-| Health Dashboard | complete |
-| Chronological Timeline | complete |
-| AI Health Chat | In Progress |
-| Vercel Deployment | In Progress |
-| Mobile Responsive Polish | Planned |
+Push to GitHub
+
+
+bashgit add .
+git commit -m "Initial commit: Pulse AI RAG system"
+git push origin main
+
+
+Connect to Vercel
+
+Go to vercel.com
+Click "New Project"
+Import your GitHub repo
+Click "Import"
+
+
+
+Add Environment Variables
+
+Settings → Environment Variables
+Add: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, GEMINI_API_KEY
+Click "Deploy"
+
+
+
+Get Live URL
+
+Vercel assigns: https://pulse-ai-xxx.vercel.app
+Share with recruiters!
+
+
+
+
+
+
+💡 How RAG Works
+
+User Upload PDF
+    ↓
+Extract Text (pdf-parse)
+    ↓
+Smart Chunk (~500 chars per chunk)
+    ↓
+Generate Embeddings (Sentence-Transformers)
+    ↓
+Store in pgvector (PostgreSQL)
+    ↓
+User Asks Question
+    ↓
+Embed Question (same model)
+    ↓
+Search pgvector (cosine similarity)
+    ↓
+Get Top 5 Chunks
+    ↓
+Send to Gemini (+ context)
+    ↓
+Stream Response (real-time)
+    ↓
+Return Answer + Citations
+
+
+🎯 What Makes This Portfolio Gold
+
+For Recruiters
+
+✅ RAG/Vector DB - Shows understanding of semantic search, embeddings, similarity algorithms
+✅ Streaming - Real-time APIs, SSE (Server-Sent Events), async patterns
+✅ Full-Stack - React frontend, Next.js backend, PostgreSQL database
+✅ DevOps - GitHub Actions CI/CD, environment management, deployment
+✅ AI Integration - Prompt engineering, LLM APIs, streaming responses
+✅ Production Ready - Type safety, testing, error handling, authentication
+
+Interview Talking Points
+
+
+"I built RAG using pgvector indexing for semantic search" - Shows vector DB knowledge
+"Implemented streaming responses with Server-Sent Events" - Shows real-time API skills
+"100% free stack - no paid APIs" - Shows cost optimization thinking
+"Type-safe TypeScript across frontend, backend, and database" - Shows discipline
+"Automated testing + GitHub Actions for every push" - Shows engineering maturity
+
+
+
+📚 Key Technologies Explained
+
+pgvector
+
+PostgreSQL extension for vector similarity search. Stores 384-dimensional embeddings and finds similar chunks using cosine distance.
+
+Sentence-Transformers
+
+Local embedding model (~100MB). Converts text to meaningful vectors. No API calls = no latency, no cost.
+
+Streaming
+
+Real-time response delivery. Server sends chunks as they arrive. User sees typing effect like ChatGPT.
+
+Citations
+
+Track which chunk the AI used. Display source + page number. Builds trust + verifiability.
+
+
+🔐 Security
+
+
+Row-Level Security (RLS) - Users see only their own data
+Supabase Auth - Secure authentication
+Environment Variables - No secrets in code
+Service Role Key - Only backend can access DB
+File Validation - PDF-only, size limits
+
+
+
+🐛 Troubleshooting
+
+Build fails locally?
+
+bashnpm run build
+
+Check for TypeScript errors.
+
+Embeddings slow on first request?
+
+
+Sentence-Transformers downloads model (~100MB) on first use
+Subsequent requests are instant
+
+
+Tests failing?
+
+bashnpm test -- --no-coverage
+
+Check test output for specific errors.
+
+Streaming not working?
+
+
+Vercel supports SSE by default
+Check browser Network tab for streaming chunks
+
+
+
+📖 Documentation
+
+
+DEPLOYMENT.md - Step-by-step deployment guide
+Database Schema - SQL setup instructions
+API Routes - Endpoint reference
+
+
+
+
+ Author:
+
+Sneha Sharma
+CS Student | AI Web Engineering | Noida
+
+
+
+⭐ Show Your Support
+
+If this helps you learn , star the repo! ⭐
+
+
+Built with ❤️ 
