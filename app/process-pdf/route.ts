@@ -1,9 +1,9 @@
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
- const pdfParse = require('pdf-parse');
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 // Initialize Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,25 +25,20 @@ function smartChunk(text: string, chunkSize: number = 500): string[] {
   let currentPos = 0;
 
   while (currentPos < text.length) {
-    // Extract chunk
     let chunk = text.substring(currentPos, currentPos + chunkSize);
 
-    // Find a good break point (end of sentence)
     const lastPeriod = chunk.lastIndexOf('.');
     const lastNewline = chunk.lastIndexOf('\n');
     const breakPoint = Math.max(lastPeriod, lastNewline);
 
     if (breakPoint > chunkSize * 0.7) {
-      // Good break point found
       chunk = text.substring(currentPos, currentPos + breakPoint + 1);
       currentPos += breakPoint + 1;
     } else {
-      // No good break point, use full chunk
       currentPos += chunkSize;
     }
 
     if (chunk.trim().length > 50) {
-      // Only add if chunk has meaningful content
       chunks.push(chunk.trim());
     }
   }
@@ -99,6 +94,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
     // Extract text from PDF
     let extractedText: string;
     try {
+      // Lazy import: only loaded when this function actually runs,
+      // so it never touches Vercel's build step.
+      const pdfParse = require('pdf-parse');
+
       const pdfData = await pdfParse(Buffer.from(pdfBuffer));
       extractedText = pdfData.text;
 
