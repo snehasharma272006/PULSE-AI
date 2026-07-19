@@ -1,20 +1,137 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+
+// Lazy load transformers for embedding
+let pipeline: any = null;
+
+async function getEmbeddingModel() {
+  if (!pipeline) {
+    const { pipeline: transformersPipeline } = await import("@xenova/transformers");
+    pipeline = await transformersPipeline(
+      "feature-extraction",
+      "Xenova/all-MiniLM-L6-v2"
+    );
+  }
+  return pipeline;
+}
+
+function embeddingToArray(embedding: any): number[] {
+  if (Array.isArray(embedding)) {
+    return embedding as number[];
+  }
+  if (embedding.data && Array.isArray(embedding.data)) {
+    return embedding.data as number[];
+  }
+  throw new Error("Invalid embedding format");
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+
+  normA = Math.sqrt(normA);
+  normB = Math.sqrt(normB);
+
+  return dotProduct / (normA * normB);
+}
+
+// RAG search function
+async function searchRelevantChunks(
+  query: string,
+  userId: string,
+  reportId?: string,
+  limit: number = 5
+): Promise<Array<{ text: string; reportId: string; pageNumber: number }>> {
+  const embeddingModel = await getEmbeddingModel();
+
+  const queryResult = await embeddingModel(query, {
+    pooling: "mean",
+    normalize: true,
+  });
+
+  const queryEmbedding = embeddingToArray(queryResult);
+
+  let query_db = supabase
+    .from("report_chunks")
+    .select("text, report_id, page_number, embedding")
+    .eq("user_id", userId)
+    .not("embedding", "is", null);
+
+  if (reportId) {
+    query_db = query_db.eq("report_id", reportId);
+  }
+
+  const { data: chunks } = await query_db;
+
+  if (!chunks || chunks.length === 0) {
+    return [];
+  }
+
+  const similarities = chunks
+    .map((chunk: any) => ({
+      text: chunk.text,
+      reportId: chunk.report_id,
+      pageNumber: chunk.page_number,
+      similarity: cosineSimilarity(queryEmbedding, chunk.embedding),
+    }))
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, limit);
+
+  return similarities.map((s) => ({
+    text: s.text,
+    reportId: s.reportId,
+    pageNumber: s.pageNumber,
+  }));
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const { question, context } = await req.json();
+    // Get auth
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Invalid authentication" }, { status: 401 });
+    }
+
+    // Get request body
+    const { question, reportId } = await req.json();
 
     if (!question) {
       return NextResponse.json({ error: "No question provided" }, { status: 400 });
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    // RAG: Search for relevant chunks
+    const relevantChunks = await searchRelevantChunks(question, user.id, reportId, 5);
 
     const contextBlock =
-      context && context.length > 0
-        ? `Here is the user's uploaded health report history:\n\n${context.join("\n\n---\n\n")}`
+      relevantChunks && relevantChunks.length > 0
+        ? `Here are relevant sections from the user's health reports:\n\n${relevantChunks
+            .map((chunk, idx) => `[Report ${idx + 1}] ${chunk.text}`)
+            .join("\n\n---\n\n")}`
         : "The user has no uploaded health reports yet.";
 
     const prompt = `You are a warm, patient health assistant inside a personal health app called Pulse AI. The user may ask about their own uploaded reports, or general health questions.
@@ -29,10 +146,18 @@ Instructions:
 
 User's question: ${question}`;
 
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent(prompt);
     const answer = result.response.text();
 
-    return NextResponse.json({ answer });
+    return NextResponse.json({
+      answer,
+      citations: relevantChunks.slice(0, 3).map((chunk, idx) => ({
+        text: chunk.text.substring(0, 100) + "...",
+        page: chunk.pageNumber,
+        reportId: chunk.reportId,
+      })),
+    });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
