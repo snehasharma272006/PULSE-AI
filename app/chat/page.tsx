@@ -47,16 +47,58 @@ export default function ChatPage() {
     setSending(true);
 
     try {
+      // Get the current session so we can attach the access token
+      const { data: { session } } = await supabase.auth.getSession();
+
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, context: reportContext }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ question }),
       });
 
-      const data = await res.json();
-      const answer = data.answer ?? "Sorry, I couldn't process that. Please try again.";
+      if (!res.ok || !res.body) {
+        throw new Error("Chat request failed");
+      }
 
-      setMessages((prev) => [...prev, { role: "assistant", content: answer }]);
+      // Add an empty assistant message that we'll fill in as chunks arrive
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE messages are separated by double newlines
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? ""; // keep the last incomplete chunk for next loop
+
+        for (const part of parts) {
+          if (!part.startsWith("data: ")) continue;
+
+          const jsonStr = part.slice(6);
+          const event = JSON.parse(jsonStr);
+
+          if (event.type === "content") {
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1] = {
+                role: "assistant",
+                content: updated[updated.length - 1].content + event.text,
+              };
+              return updated;
+            });
+          }
+          // event.type === "citations" or "done" can be handled here later if needed
+        }
+      }
     } catch (err) {
       console.error(err);
       setMessages((prev) => [

@@ -26,8 +26,8 @@ function embeddingToArray(embedding: any): number[] {
   if (Array.isArray(embedding)) {
     return embedding as number[];
   }
-  if (embedding.data && Array.isArray(embedding.data)) {
-    return embedding.data as number[];
+  if (embedding.data && (Array.isArray(embedding.data) || embedding.data instanceof Float32Array)) {
+    return Array.from(embedding.data) as number[];
   }
   throw new Error("Invalid embedding format");
 }

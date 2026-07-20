@@ -96,10 +96,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
     try {
       // Lazy import: only loaded when this function actually runs,
       // so it never touches Vercel's build step.
-      const pdfParse = require('pdf-parse');
+      // pdf-parse v2 uses a class-based API, not a plain function.
+      const { PDFParse } = require('pdf-parse');
 
-      const pdfData = await pdfParse(Buffer.from(pdfBuffer));
-      extractedText = pdfData.text;
+      const parser = new PDFParse({ data: Buffer.from(pdfBuffer) });
+      const result = await parser.getText();
+      extractedText = result.text;
 
       if (!extractedText || extractedText.trim().length === 0) {
         return NextResponse.json(

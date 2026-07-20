@@ -37,6 +37,8 @@ export default function UploadPage() {
     fetchReports();
   }, []);
 
+  const isImageFile = (file: File) => file.type.startsWith("image/");
+
   const handleFile = async (file: File) => {
     if (!file) return;
     setUploading(true);
@@ -67,14 +69,14 @@ export default function UploadPage() {
       .from("reports")
       .getPublicUrl(filePath);
 
-    // ===== NEW STEP: send the file to our AI route for analysis =====
+    // ===== Get a quick summary for the dashboard =====
     let summary: string | null = null;
 
     try {
       const aiFormData = new FormData();
       aiFormData.append("file", file);
 
-      const isImage = file.type.startsWith("image/");
+      const isImage = isImageFile(file);
       const endpoint = isImage ? "/api/analyze-image" : "/api/analyze-pdf";
 
       const aiResponse = await fetch(endpoint, {
@@ -88,19 +90,55 @@ export default function UploadPage() {
       console.log("AI summary:", summary);
     } catch (aiError) {
       console.error("AI analysis failed:", aiError);
-      // Deliberately not stopping the upload if AI fails — the
-      // file is still safely saved even without a summary.
     }
-    // ===== END NEW STEP =====
+    // ===== END summary step =====
 
-    const { error: insertError } = await supabase.from("reports").insert({
-      user_id: user.id,
-      file_url: urlData.publicUrl,
-      file_name: file.name,
-      summary: summary,
-    });
+    const { data: insertedReport, error: insertError } = await supabase
+      .from("reports")
+      .insert({
+        user_id: user.id,
+        file_url: urlData.publicUrl,
+        file_name: file.name,
+        summary: summary,
+      })
+      .select()
+      .single();
 
     console.log("Insert error:", insertError);
+    console.log("Inserted report:", insertedReport);
+
+    // ===== NEW STEP: chunk + embed the PDF for chat search =====
+    if (!isImageFile(file) && insertedReport && !insertError) {
+      try {
+        console.log("Calling process-pdf for report:", insertedReport.id);
+
+        const { data: { session } } = await supabase.auth.getSession();
+
+        const chunkResponse = await fetch("/api/process-pdf", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            reportId: insertedReport.id,
+            fileUrl: urlData.publicUrl,
+          }),
+        });
+
+        const chunkData = await chunkResponse.json();
+        console.log("process-pdf response:", chunkData);
+      } catch (chunkError) {
+        console.error("Chunking failed:", chunkError);
+      }
+    } else {
+      console.log("Skipping process-pdf:", {
+        isImage: isImageFile(file),
+        hasInsertedReport: !!insertedReport,
+        insertError,
+      });
+    }
+    // ===== END chunking step =====
 
     setUploading(false);
     router.push("/dashboard");
