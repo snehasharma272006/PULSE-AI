@@ -4,13 +4,11 @@ import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-// Initialize Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Types
 interface ProcessResponse {
   success: boolean;
   reportId?: string;
@@ -19,7 +17,6 @@ interface ProcessResponse {
   error?: string;
 }
 
-// Smart chunking logic
 function smartChunk(text: string, chunkSize: number = 500): string[] {
   const chunks: string[] = [];
   let currentPos = 0;
@@ -48,13 +45,9 @@ function smartChunk(text: string, chunkSize: number = 500): string[] {
 
 export async function POST(request: NextRequest): Promise<NextResponse<ProcessResponse>> {
   try {
-    // Verify authentication
     const authHeader = request.headers.get('authorization');
     if (!authHeader) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const token = authHeader.replace('Bearer ', '');
@@ -64,13 +57,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
     } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid authentication' },
-        { status: 401 }
-      );
+      return NextResponse.json({ success: false, error: 'Invalid authentication' }, { status: 401 });
     }
 
-    // Get request body
     const { reportId, fileUrl } = await request.json();
 
     if (!reportId || !fileUrl) {
@@ -80,7 +69,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
       );
     }
 
-    // Fetch PDF from URL
     const pdfResponse = await fetch(fileUrl);
     if (!pdfResponse.ok) {
       return NextResponse.json(
@@ -91,14 +79,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
 
     const pdfBuffer = await pdfResponse.arrayBuffer();
 
-    // Extract text from PDF
     let extractedText: string;
     try {
-      // Lazy import: only loaded when this function actually runs,
-      // so it never touches Vercel's build step.
-      // pdf-parse v2 uses a class-based API, not a plain function.
       const { PDFParse } = require('pdf-parse');
-
       const parser = new PDFParse({ data: Buffer.from(pdfBuffer) });
       const result = await parser.getText();
       extractedText = result.text;
@@ -117,7 +100,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
       );
     }
 
-    // Smart chunk the text
     const chunks = smartChunk(extractedText);
 
     if (chunks.length === 0) {
@@ -127,14 +109,40 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
       );
     }
 
-    // Store chunks in database (without embeddings for now)
-    const chunkRecords = chunks.map((chunk, index) => ({
-      user_id: user.id,
-      report_id: reportId,
-      text: chunk,
-      chunk_index: index,
-      page_number: 1,
-    }));
+    // Generate embeddings for each chunk
+    let chunkRecords;
+    try {
+      const { pipeline: transformersPipeline } = await import('@xenova/transformers');
+      const embedder = await transformersPipeline(
+        'feature-extraction',
+        'Xenova/all-MiniLM-L6-v2'
+      );
+
+      chunkRecords = [];
+      for (let index = 0; index < chunks.length; index++) {
+        const chunk = chunks[index];
+        const embeddingResult = await embedder(chunk, {
+          pooling: 'mean',
+          normalize: true,
+        });
+        const embedding = Array.from(embeddingResult.data as Float32Array) as number[];
+
+        chunkRecords.push({
+          user_id: user.id,
+          report_id: reportId,
+          text: chunk,
+          chunk_index: index,
+          page_number: 1,
+          embedding,
+        });
+      }
+    } catch (embedError) {
+      console.error('Embedding generation error:', embedError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to generate embeddings' },
+        { status: 500 }
+      );
+    }
 
     const { data: insertedChunks, error: insertError } = await supabase
       .from('report_chunks')
@@ -149,7 +157,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
       );
     }
 
-    // Update report with extracted text
     const { error: updateError } = await supabase
       .from('reports')
       .update({
@@ -168,15 +175,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
         success: true,
         reportId,
         chunksCreated: insertedChunks?.length || 0,
-        message: `Successfully extracted ${insertedChunks?.length || 0} chunks. Ready for embeddings.`,
+        message: `Successfully created ${insertedChunks?.length || 0} chunks with embeddings.`,
       },
       { status: 200 }
     );
   } catch (error) {
     console.error('Process PDF error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 }
