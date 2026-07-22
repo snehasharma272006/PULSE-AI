@@ -45,6 +45,7 @@ function smartChunk(text: string, chunkSize: number = 500): string[] {
 
 export async function POST(request: NextRequest): Promise<NextResponse<ProcessResponse>> {
   try {
+    // Auth check
     const authHeader = request.headers.get('authorization');
     if (!authHeader) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
@@ -60,6 +61,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
       return NextResponse.json({ success: false, error: 'Invalid authentication' }, { status: 401 });
     }
 
+    // Parse request body
     const { reportId, fileUrl } = await request.json();
 
     if (!reportId || !fileUrl) {
@@ -69,6 +71,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
       );
     }
 
+    // Fetch PDF from URL
     const pdfResponse = await fetch(fileUrl);
     if (!pdfResponse.ok) {
       return NextResponse.json(
@@ -79,16 +82,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
 
     const pdfBuffer = await pdfResponse.arrayBuffer();
 
+    // Extract text from PDF
     let extractedText: string;
     try {
-      const { PDFParse } = require('pdf-parse');
-      const parser = new PDFParse({ data: Buffer.from(pdfBuffer) });
-      const result = await parser.getText();
-      extractedText = result.text;
+      const PDFParse = require('pdf-parse');
+      const pdfData = await PDFParse(Buffer.from(pdfBuffer));
+      extractedText = pdfData.text;
 
       if (!extractedText || extractedText.trim().length === 0) {
         return NextResponse.json(
-          { success: false, error: 'No text found in PDF. Try a text-based PDF.' },
+          { success: false, error: 'No text found in PDF. Use a text-based PDF.' },
           { status: 400 }
         );
       }
@@ -100,6 +103,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
       );
     }
 
+    // Smart chunk the text
     const chunks = smartChunk(extractedText);
 
     if (chunks.length === 0) {
@@ -109,23 +113,19 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
       );
     }
 
-    // Generate embeddings for each chunk
-    let chunkRecords;
+    // Generate embeddings
+    let chunkRecords: any[] = [];
     try {
-      const { pipeline: transformersPipeline } = await import('@xenova/transformers');
-      const embedder = await transformersPipeline(
-        'feature-extraction',
-        'Xenova/all-MiniLM-L6-v2'
-      );
+      const { pipeline } = await import('@xenova/transformers');
+      const embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
 
-      chunkRecords = [];
       for (let index = 0; index < chunks.length; index++) {
         const chunk = chunks[index];
         const embeddingResult = await embedder(chunk, {
           pooling: 'mean',
           normalize: true,
         });
-        const embedding = Array.from(embeddingResult.data as Float32Array) as number[];
+        const embedding = Array.from(embeddingResult.data as Float32Array);
 
         chunkRecords.push({
           user_id: user.id,
@@ -144,6 +144,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
       );
     }
 
+    // Store chunks in database
     const { data: insertedChunks, error: insertError } = await supabase
       .from('report_chunks')
       .insert(chunkRecords)
@@ -157,6 +158,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
       );
     }
 
+    // Update report with extracted text
     const { error: updateError } = await supabase
       .from('reports')
       .update({
