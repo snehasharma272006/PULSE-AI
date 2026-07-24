@@ -44,24 +44,43 @@ export default function Navbar() {
         </h1>
       </div>
 
-      {/* Links */}
-      <ul
-        style={{
-          display: "flex",
-          gap: "2rem",
-          listStyle: "none",
-          margin: 0,
-          padding: 0,
-        }}
-      >
-        {navLinks.map((item) => (
-          <li key={item.href}>
-            <Link href={item.href} className="nav-link">
-              {item.label}
-            </Link>
-          </li>
-        ))}
-      </ul>
+      {/* Links + Login, grouped together on the right */}
+      <div style={{ display: "flex", alignItems: "center", gap: "2.5rem" }}>
+        <ul
+          style={{
+            display: "flex",
+            gap: "2rem",
+            listStyle: "none",
+            margin: 0,
+            padding: 0,
+          }}
+        >
+          {navLinks.map((item) => (
+            <li key={item.href}>
+              <Link href={item.href} className="nav-link">
+                {item.label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+
+        <Link
+          href="/login"
+          style={{
+            padding: "0.5rem 1.3rem",
+            borderRadius: "8px",
+            border: "1px solid #38bdf8",
+            color: "#7dd3fc",
+            fontSize: "0.9rem",
+            fontWeight: 600,
+            textDecoration: "none",
+            whiteSpace: "nowrap",
+            transition: "all 0.2s ease",
+          }}
+        >
+          Login
+        </Link>
+      </div>
     </nav>
   );
 }
