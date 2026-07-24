@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+const pdf = require('pdf-parse');
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -62,46 +63,62 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
     }
 
     // Parse request body
-    const { reportId, fileUrl } = await request.json();
+    const { reportId, filePath } = await request.json(); // Changed from fileUrl to filePath
 
-    if (!reportId || !fileUrl) {
+    if (!reportId || !filePath) {
       return NextResponse.json(
-        { success: false, error: 'reportId and fileUrl are required' },
+        { success: false, error: 'reportId and filePath are required' },
         { status: 400 }
       );
     }
 
-    // Fetch PDF from URL
-    const pdfResponse = await fetch(fileUrl);
-    if (!pdfResponse.ok) {
+    // Download PDF directly from Supabase using SDK (better than signed URLs)
+    let pdfBuffer: ArrayBuffer;
+    try {
+      const { data, error: downloadError } = await supabase.storage
+        .from('reports')
+        .download(filePath);
+
+      if (downloadError || !data) {
+        console.error('Download error:', downloadError);
+        return NextResponse.json(
+          { success: false, error: 'Failed to download PDF from storage' },
+          { status: 500 }
+        );
+      }
+
+      pdfBuffer = await data.arrayBuffer();
+    } catch (fetchError) {
+      console.error('Fetch error:', fetchError);
       return NextResponse.json(
         { success: false, error: 'Failed to fetch PDF from storage' },
         { status: 500 }
       );
     }
 
-    const pdfBuffer = await pdfResponse.arrayBuffer();
-
     // Extract text from PDF
-    let extractedText: string;
-    try {
-      const PDFParse = require('pdf-parse');
-      const pdfData = await PDFParse(Buffer.from(pdfBuffer));
-      extractedText = pdfData.text;
+    // Extract text from PDF
+let extractedText: string = '';
+try {
+  const { PDFParse } = require('pdf-parse');
+  const parser = new PDFParse({ data: Buffer.from(new Uint8Array(pdfBuffer)) });
+  const result = await parser.getText();
+  extractedText = result.text;
+  await parser.destroy(); // free up resources, good habit
 
-      if (!extractedText || extractedText.trim().length === 0) {
-        return NextResponse.json(
-          { success: false, error: 'No text found in PDF. Use a text-based PDF.' },
-          { status: 400 }
-        );
-      }
-    } catch (pdfError) {
-      console.error('PDF extraction error:', pdfError);
-      return NextResponse.json(
-        { success: false, error: 'Failed to extract text from PDF' },
-        { status: 500 }
-      );
-    }
+  if (!extractedText || extractedText.trim().length === 0) {
+    return NextResponse.json(
+      { success: false, error: 'No text found in PDF. Use a text-based PDF.' },
+      { status: 400 }
+    );
+  }
+} catch (pdfError) {
+  console.error('PDF extraction error:', pdfError);
+  return NextResponse.json(
+    { success: false, error: `Failed to extract text from PDF: ${pdfError}` },
+    { status: 500 }
+  );
+}
 
     // Smart chunk the text
     const chunks = smartChunk(extractedText);
@@ -183,6 +200,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
     );
   } catch (error) {
     console.error('Process PDF error:', error);
-    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: `Internal server error: ${error}` },
+      { status: 500 }
+    );
   }
 }

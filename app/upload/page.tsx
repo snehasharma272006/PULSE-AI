@@ -114,16 +114,16 @@ export default function UploadPage() {
 
         const { data: { session } } = await supabase.auth.getSession();
 
-        const chunkResponse = await fetch("/api/process-pdf", {
+        const chunkResponse: Response = await fetch("/api/process-pdf", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${session?.access_token}`,
           },
           body: JSON.stringify({
-            reportId: insertedReport.id,
-            fileUrl: urlData.publicUrl,
-          }),
+  reportId: insertedReport.id,
+  filePath: filePath,
+})
         });
 
         const chunkData = await chunkResponse.json();
