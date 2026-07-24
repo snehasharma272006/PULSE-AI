@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-const pdf = require('pdf-parse');
+require('pdf-parse/worker');
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -101,10 +101,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
 let extractedText: string = '';
 try {
   const { PDFParse } = require('pdf-parse');
-  const parser = new PDFParse({ data: Buffer.from(new Uint8Array(pdfBuffer)) });
-  const result = await parser.getText();
-  extractedText = result.text;
-  await parser.destroy(); // free up resources, good habit
+const parser = new PDFParse({ data: Buffer.from(new Uint8Array(pdfBuffer)) });
+const result = await parser.getText();
+extractedText = result.text;
+await parser.destroy();
 
   if (!extractedText || extractedText.trim().length === 0) {
     return NextResponse.json(
