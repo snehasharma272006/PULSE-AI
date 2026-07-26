@@ -1,12 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import { env } from 'process';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Initialize Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 // Types
 interface EmbeddingResponse {
@@ -17,29 +19,10 @@ interface EmbeddingResponse {
   error?: string;
 }
 
-// Lazy load transformers (only when needed, for performance)
-let pipeline: any = null;
-
-async function getEmbeddingModel() {
-  if (!pipeline) {
-    const { pipeline: transformersPipeline } = await import('@xenova/transformers');
-    pipeline = await transformersPipeline(
-      'feature-extraction',
-      'Xenova/all-MiniLM-L6-v2'
-    );
-  }
-  return pipeline;
-}
-
-// Convert embedding output to array
-function embeddingToArray(embedding: any): number[] {
-  if (Array.isArray(embedding)) {
-    return embedding as number[];
-  }
-  if (embedding.data && Array.isArray(embedding.data)) {
-    return embedding.data as number[];
-  }
-  throw new Error('Invalid embedding format');
+async function getEmbedding(text: string): Promise<number[]> {
+  const model = genAI.getGenerativeModel({ model: 'gemini-embedding-001' });
+  const result = await model.embedContent(text);
+  return result.embedding.values;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<EmbeddingResponse>> {
@@ -101,21 +84,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<Embedding
 
     console.log(`Processing ${chunks.length} chunks for embeddings...`);
 
-    // Load embedding model
-    const embeddingModel = await getEmbeddingModel();
-
     // Generate embeddings for all chunks
     const embeddings: Array<{ id: string; embedding: number[] }> = [];
 
     for (const chunk of chunks) {
       try {
-        // Generate embedding
-        const result = await embeddingModel(chunk.text, {
-          pooling: 'mean',
-          normalize: true,
-        });
-
-        const embeddingArray = embeddingToArray(result);
+        const embeddingArray = await getEmbedding(chunk.text);
 
         embeddings.push({
           id: chunk.id,
