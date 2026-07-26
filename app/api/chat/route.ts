@@ -9,27 +9,10 @@ const supabase = createClient(
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-let pipeline: any = null;
-
-async function getEmbeddingModel() {
-  if (!pipeline) {
-    const { pipeline: transformersPipeline } = await import("@xenova/transformers");
-    pipeline = await transformersPipeline(
-      "feature-extraction",
-      "Xenova/all-MiniLM-L6-v2"
-    );
-  }
-  return pipeline;
-}
-
-function embeddingToArray(embedding: any): number[] {
-  if (Array.isArray(embedding)) {
-    return embedding as number[];
-  }
-  if (embedding.data && (Array.isArray(embedding.data) || embedding.data instanceof Float32Array)) {
-    return Array.from(embedding.data) as number[];
-  }
-  throw new Error("Invalid embedding format");
+async function getQueryEmbedding(text: string): Promise<number[]> {
+  const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
+  const result = await model.embedContent(text);
+  return result.embedding.values;
 }
 
 function cosineSimilarity(a: number[], b: number[]): number {
@@ -55,14 +38,7 @@ async function searchRelevantChunks(
   reportId?: string,
   limit: number = 5
 ): Promise<Array<{ text: string; reportId: string; pageNumber: number }>> {
-  const embeddingModel = await getEmbeddingModel();
-
-  const queryResult = await embeddingModel(query, {
-    pooling: "mean",
-    normalize: true,
-  });
-
-  const queryEmbedding = embeddingToArray(queryResult);
+  const queryEmbedding = await getQueryEmbedding(query);
 
   let query_db = supabase
     .from("report_chunks")

@@ -97,28 +97,27 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
     }
 
     // Extract text from PDF
-    // Extract text from PDF
-let extractedText: string = '';
-try {
-  const { PDFParse } = require('pdf-parse');
-const parser = new PDFParse({ data: Buffer.from(new Uint8Array(pdfBuffer)) });
-const result = await parser.getText();
-extractedText = result.text;
-await parser.destroy();
+    let extractedText: string = '';
+    try {
+      const { PDFParse } = require('pdf-parse');
+      const parser = new PDFParse({ data: Buffer.from(new Uint8Array(pdfBuffer)) });
+      const result = await parser.getText();
+      extractedText = result.text;
+      await parser.destroy();
 
-  if (!extractedText || extractedText.trim().length === 0) {
-    return NextResponse.json(
-      { success: false, error: 'No text found in PDF. Use a text-based PDF.' },
-      { status: 400 }
-    );
-  }
-} catch (pdfError) {
-  console.error('PDF extraction error:', pdfError);
-  return NextResponse.json(
-    { success: false, error: `Failed to extract text from PDF: ${pdfError}` },
-    { status: 500 }
-  );
-}
+      if (!extractedText || extractedText.trim().length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'No text found in PDF. Use a text-based PDF.' },
+          { status: 400 }
+        );
+      }
+    } catch (pdfError) {
+      console.error('PDF extraction error:', pdfError);
+      return NextResponse.json(
+        { success: false, error: `Failed to extract text from PDF: ${pdfError}` },
+        { status: 500 }
+      );
+    }
 
     // Smart chunk the text
     const chunks = smartChunk(extractedText);
@@ -130,19 +129,32 @@ await parser.destroy();
       );
     }
 
-    // Generate embeddings
+    // Generate embeddings via Gemini
     let chunkRecords: any[] = [];
     try {
-      const { pipeline } = await import('@xenova/transformers');
-      const embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+      const apiKey = process.env.GEMINI_API_KEY!;
 
       for (let index = 0; index < chunks.length; index++) {
         const chunk = chunks[index];
-        const embeddingResult = await embedder(chunk, {
-          pooling: 'mean',
-          normalize: true,
-        });
-        const embedding = Array.from(embeddingResult.data as Float32Array);
+
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: { parts: [{ text: chunk }] },
+            }),
+          }
+        );
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`Gemini embedding failed: ${errText}`);
+        }
+
+        const data = await res.json();
+        const embedding = data.embedding.values;
 
         chunkRecords.push({
           user_id: user.id,
@@ -156,7 +168,10 @@ await parser.destroy();
     } catch (embedError) {
       console.error('Embedding generation error:', embedError);
       return NextResponse.json(
-        { success: false, error: 'Failed to generate embeddings' },
+        {
+          success: false,
+          error: `Failed to generate embeddings: ${embedError instanceof Error ? embedError.message : String(embedError)}`,
+        },
         { status: 500 }
       );
     }
