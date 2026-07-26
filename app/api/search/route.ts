@@ -1,11 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Initialize Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 // Types
 interface SearchResult {
@@ -25,29 +28,10 @@ interface SearchResponse {
   error?: string;
 }
 
-// Lazy load transformers
-let pipeline: any = null;
-
-async function getEmbeddingModel() {
-  if (!pipeline) {
-    const { pipeline: transformersPipeline } = await import('@xenova/transformers');
-    pipeline = await transformersPipeline(
-      'feature-extraction',
-      'Xenova/all-MiniLM-L6-v2'
-    );
-  }
-  return pipeline;
-}
-
-// Convert embedding output to array
-function embeddingToArray(embedding: any): number[] {
-  if (Array.isArray(embedding)) {
-    return embedding as number[];
-  }
-  if (embedding.data && Array.isArray(embedding.data)) {
-    return embedding.data as number[];
-  }
-  throw new Error('Invalid embedding format');
+async function getQueryEmbedding(text: string): Promise<number[]> {
+  const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
+  const result = await model.embedContent(text);
+  return result.embedding.values;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<SearchResponse>> {
@@ -84,16 +68,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
       );
     }
 
-    // Load embedding model
-    const embeddingModel = await getEmbeddingModel();
-
     // Generate embedding for query
-    const queryResult = await embeddingModel(query, {
-      pooling: 'mean',
-      normalize: true,
-    });
-
-    const queryEmbedding = embeddingToArray(queryResult);
+    const queryEmbedding = await getQueryEmbedding(query);
 
     console.log(`Query: "${query}"`);
     console.log(`Query embedding dimensions: ${queryEmbedding.length}`);
