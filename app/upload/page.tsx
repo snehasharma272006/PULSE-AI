@@ -69,7 +69,6 @@ export default function UploadPage() {
       .from("reports")
       .getPublicUrl(filePath);
 
-    // ===== Get a quick summary for the dashboard =====
     let summary: string | null = null;
 
     try {
@@ -91,7 +90,6 @@ export default function UploadPage() {
     } catch (aiError) {
       console.error("AI analysis failed:", aiError);
     }
-    // ===== END summary step =====
 
     const { data: insertedReport, error: insertError } = await supabase
       .from("reports")
@@ -107,7 +105,6 @@ export default function UploadPage() {
     console.log("Insert error:", insertError);
     console.log("Inserted report:", insertedReport);
 
-    // ===== NEW STEP: chunk + embed the PDF for chat search =====
     if (!isImageFile(file) && insertedReport && !insertError) {
       try {
         console.log("Calling process-pdf for report:", insertedReport.id);
@@ -138,7 +135,6 @@ export default function UploadPage() {
         insertError,
       });
     }
-    // ===== END chunking step =====
 
     setUploading(false);
     router.push("/dashboard");
@@ -155,18 +151,21 @@ export default function UploadPage() {
   };
 
   return (
-    <main className="min-h-screen bg-black text-white px-6 py-12 max-w-2xl mx-auto">
+    <main
+      className="min-h-screen px-6 py-12 max-w-2xl mx-auto"
+      style={{ background: "var(--background)", color: "var(--foreground)" }}
+    >
       <div className="mb-10">
-        <p className="text-sky-400 text-sm font-medium tracking-widest uppercase mb-2">
+        <p className="text-sm font-medium tracking-widest uppercase mb-2" style={{ color: "#3D6FA0" }}>
           Medical Records
         </p>
         <h1
           className="text-4xl font-extrabold"
-          style={{ fontFamily: "'Syne', sans-serif" }}
+          style={{ fontFamily: "'Syne', sans-serif", color: "var(--foreground)" }}
         >
           Upload Documents
         </h1>
-        <p className="text-slate-400 mt-2 text-sm">
+        <p className="mt-2 text-sm" style={{ color: "rgba(27,35,51,0.55)" }}>
           Your files are processed locally. Nothing leaves your device.
         </p>
       </div>
@@ -181,16 +180,16 @@ export default function UploadPage() {
           const dropped = e.dataTransfer.files?.[0];
           if (dropped) handleFile(dropped);
         }}
-        className={`relative cursor-pointer rounded-2xl border-2 border-dashed transition-all duration-300 flex flex-col items-center justify-center gap-4 py-16 px-8 text-center
-          ${dragging
-            ? "border-sky-400 bg-sky-400/10"
-            : "border-white/10 bg-white/[0.03] hover:border-sky-400/40 hover:bg-white/[0.05]"
-          }`}
+        className="relative cursor-pointer rounded-2xl border-2 border-dashed transition-all duration-300 flex flex-col items-center justify-center gap-4 py-16 px-8 text-center"
+        style={{
+          borderColor: dragging ? "#5B8FC4" : "rgba(27,35,51,0.15)",
+          background: dragging ? "rgba(91,143,196,0.08)" : "rgba(255,255,255,0.5)",
+        }}
       >
         <div
           className="absolute w-24 h-24 rounded-full pointer-events-none"
           style={{
-            background: "radial-gradient(circle, rgba(56,189,248,0.18) 0%, transparent 70%)",
+            background: "radial-gradient(circle, rgba(91,143,196,0.14) 0%, transparent 70%)",
             top: "50%",
             left: "50%",
             transform: "translate(-50%, -60%)",
@@ -199,9 +198,9 @@ export default function UploadPage() {
 
         <div
           className="w-14 h-14 rounded-xl flex items-center justify-center"
-          style={{ background: "rgba(56,189,248,0.12)", border: "1px solid rgba(56,189,248,0.2)" }}
+          style={{ background: "rgba(91,143,196,0.10)", border: "1px solid rgba(91,143,196,0.22)" }}
         >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="1.8">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3D6FA0" strokeWidth="1.8">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
             <polyline points="17 8 12 3 7 8" />
             <line x1="12" y1="3" x2="12" y2="15" />
@@ -209,10 +208,10 @@ export default function UploadPage() {
         </div>
 
         <div>
-          <p className="text-white font-semibold text-base">
+          <p className="font-semibold text-base" style={{ color: "var(--foreground)" }}>
             {uploading ? "Uploading..." : dragging ? "Drop to upload" : "Drag a file here"}
           </p>
-          <p className="text-slate-500 text-sm mt-1">
+          <p className="text-sm mt-1" style={{ color: "rgba(27,35,51,0.45)" }}>
             {uploading ? "Please wait" : "or click to browse"}
           </p>
         </div>
@@ -223,9 +222,9 @@ export default function UploadPage() {
               key={tag}
               className="text-xs px-3 py-1 rounded-full"
               style={{
-                background: "rgba(56,189,248,0.08)",
-                border: "1px solid rgba(56,189,248,0.18)",
-                color: "#7dd3fc",
+                background: "rgba(91,143,196,0.10)",
+                border: "1px solid rgba(91,143,196,0.22)",
+                color: "#3D6FA0",
               }}
             >
               {tag}
@@ -247,36 +246,36 @@ export default function UploadPage() {
 
       <div className="mt-10">
         <h2
-          className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4"
-          style={{ fontFamily: "'Syne', sans-serif" }}
+          className="text-xs font-semibold uppercase tracking-widest mb-4"
+          style={{ fontFamily: "'Syne', sans-serif", color: "rgba(27,35,51,0.45)" }}
         >
           Recent Uploads
         </h2>
 
         <div className="flex flex-col gap-3">
           {recentUploads.length === 0 ? (
-            <p className="text-slate-600 text-sm">No uploads yet.</p>
+            <p className="text-sm" style={{ color: "rgba(27,35,51,0.35)" }}>No uploads yet.</p>
           ) : (
             recentUploads.map((file) => (
               <div
                 key={file.id}
                 className="flex items-center gap-4 rounded-xl px-4 py-3 group transition-colors duration-200 cursor-pointer"
                 style={{
-                  background: "rgba(255,255,255,0.03)",
-                  border: "1px solid rgba(255,255,255,0.07)",
+                  background: "rgba(255,255,255,0.6)",
+                  border: "1px solid rgba(27,35,51,0.08)",
                 }}
                 onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(56,189,248,0.25)";
+                  (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(91,143,196,0.3)";
                 }}
                 onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(255,255,255,0.07)";
+                  (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(27,35,51,0.08)";
                 }}
               >
                 <div
                   className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: "rgba(56,189,248,0.08)" }}
+                  style={{ background: "rgba(91,143,196,0.10)" }}
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="1.8">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3D6FA0" strokeWidth="1.8">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                     <polyline points="14 2 14 8 20 8" />
                     <line x1="16" y1="13" x2="8" y2="13" />
@@ -286,14 +285,14 @@ export default function UploadPage() {
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{file.file_name}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{formatDate(file.created_at)}</p>
+                  <p className="text-sm font-medium truncate" style={{ color: "var(--foreground)" }}>{file.file_name}</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(27,35,51,0.45)" }}>{formatDate(file.created_at)}</p>
                 </div>
 
                 <svg
                   width="16" height="16" viewBox="0 0 24 24" fill="none"
-                  stroke="rgba(255,255,255,0.2)" strokeWidth="2"
-                  className="group-hover:stroke-sky-400 transition-colors"
+                  stroke="rgba(27,35,51,0.25)" strokeWidth="2"
+                  className="transition-colors"
                 >
                   <path d="M5 12h14M12 5l7 7-7 7" />
                 </svg>

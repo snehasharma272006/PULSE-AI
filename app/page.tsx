@@ -1,5 +1,5 @@
 import Hero from "@/components/Hero";
-import FeatureCard from "@/components/FeatureCard";
+import AnimatedFeatureCard from "@/components/AnimatedFeatureCard";
 
 const features = [
   {
@@ -30,54 +30,52 @@ export default function Home() {
       <section
         style={{
           width: "100%",
-          maxWidth: "1100px",
+          maxWidth: "1000px",
           margin: "0 auto",
-          padding: "4rem 2rem 7rem",
+          padding: "1.5rem 2rem 3rem",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
         }}
       >
-        <p className="section-eyebrow fade-up-2">WHAT WE OFFER</p>
+        <p className="section-eyebrow">WHAT WE OFFER</p>
 
         <h2
-          className="fade-up-3"
           style={{
             fontFamily: "'Syne', sans-serif",
-            fontSize: "clamp(1.8rem, 4vw, 2.5rem)",
+            fontSize: "clamp(1.4rem, 3vw, 1.9rem)",
             fontWeight: 700,
-            color: "#f8fafc",
+            color: "var(--foreground)",
             textAlign: "center",
-            marginBottom: "0.75rem",
+            marginBottom: "0.4rem",
           }}
         >
           Core Features
         </h2>
 
         <p
-          className="fade-up-3"
           style={{
             fontFamily: "'Inter', sans-serif",
-            fontSize: "0.92rem",
-            color: "rgba(248,250,252,0.38)",
+            fontSize: "0.82rem",
+            color: "var(--foreground)",
+            opacity: 0.5,
             textAlign: "center",
-            marginBottom: "3.5rem",
+            marginBottom: "1.75rem",
           }}
         >
           Everything you need to understand your health, at a glance.
         </p>
 
         <div
-          className="fade-up-4"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(3, 1fr)",
-            gap: "1.2rem",
+            gap: "0.9rem",
             width: "100%",
           }}
         >
-          {features.map((feature) => (
-            <FeatureCard key={feature.title} {...feature} />
+          {features.map((feature, i) => (
+            <AnimatedFeatureCard key={feature.title} feature={feature} index={i} />
           ))}
         </div>
       </section>
