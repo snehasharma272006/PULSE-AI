@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getEmbeddingsBatch } from '@/lib/embeddings';
 
 // Initialize Supabase
 const supabase = createClient(
@@ -8,21 +8,14 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-
 // Types
 interface EmbeddingResponse {
   success: boolean;
   reportId?: string;
   chunksEmbedded?: number;
+  failedChunkIds?: string[];
   message?: string;
   error?: string;
-}
-
-async function getEmbedding(text: string): Promise<number[]> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-embedding-001' });
-  const result = await model.embedContent(text);
-  return result.embedding.values;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<EmbeddingResponse>> {
@@ -84,23 +77,19 @@ export async function POST(request: NextRequest): Promise<NextResponse<Embedding
 
     console.log(`Processing ${chunks.length} chunks for embeddings...`);
 
-    // Generate embeddings for all chunks
-    const embeddings: Array<{ id: string; embedding: number[] }> = [];
+    // Generate embeddings with limited concurrency + retries, tracking failures
+    const { succeeded, failed } = await getEmbeddingsBatch(
+      chunks.map((chunk) => ({ id: chunk.id, text: chunk.text, meta: chunk.chunk_index })),
+      { concurrency: 5 }
+    );
 
-    for (const chunk of chunks) {
-      try {
-        const embeddingArray = await getEmbedding(chunk.text);
+    const embeddings = succeeded.map((s) => ({ id: s.id, embedding: s.embedding }));
 
-        embeddings.push({
-          id: chunk.id,
-          embedding: embeddingArray,
-        });
-
-        console.log(`Embedded chunk ${chunk.chunk_index}: ${embeddingArray.length} dimensions`);
-      } catch (error) {
-        console.error(`Error embedding chunk ${chunk.id}:`, error);
-        // Continue with next chunk
-      }
+    if (failed.length > 0) {
+      console.error(
+        `Failed to embed ${failed.length}/${chunks.length} chunks:`,
+        failed.map((f) => `id=${f.id} error=${f.error}`).join('; ')
+      );
     }
 
     if (embeddings.length === 0) {
@@ -140,7 +129,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<Embedding
         success: true,
         reportId,
         chunksEmbedded: successCount,
-        message: `Successfully generated embeddings for ${successCount} chunks. Ready for semantic search.`,
+        failedChunkIds: failed.length > 0 ? failed.map((f) => f.id) : undefined,
+        message:
+          failed.length > 0
+            ? `Generated embeddings for ${successCount} of ${chunks.length} chunks. ${failed.length} failed and can be retried.`
+            : `Successfully generated embeddings for ${successCount} chunks. Ready for semantic search.`,
       },
       { status: 200 }
     );
