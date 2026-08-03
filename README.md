@@ -1,11 +1,11 @@
-ulse AI - Health Timeline AI 🏥
+Pulse AI - Health Timeline AI 🏥
 
 AI-powered medical record management with semantic search, streaming chat, and health trends visualization.
-🚀 Features
+
+
+Features:
 
 RAG System (Retrieval-Augmented Generation)
-
-
 PDF Upload & Storage - Secure file upload to Supabase
 Smart Text Extraction - Intelligent chunking (breaks at sentences, not mid-word)
 Local Embeddings - 384-dimensional vectors via Sentence-Transformers (no API calls)
@@ -14,8 +14,6 @@ Source Citations - AI responses include exact sources + page numbers
 
 
 Streaming Chat
-
-
 Real-time Typing Effect - Watch responses stream in like ChatGPT
 RAG Context - Automatically finds relevant health records
 Citation Cards - See exactly where the AI got its information
@@ -23,17 +21,13 @@ Multi-report Support - Chat about specific or all reports
 
 
 Health Trends
-
-
 Interactive Charts - Bar graphs of metrics over time
-Auto-Detection - Parses cholesterol, blood pressure, weight, HbA1c from reports
+Auto-Detection - eg. Parses cholesterol, blood pressure, weight, HbA1c from reports
 Stats Summary - Latest value, average, and change indicators
 Comparison - Side-by-side report comparison with trend arrows
 
 
 Production Ready
-
-
 Type Safety - Full TypeScript coverage
 Jest Tests - Automated test suite
 GitHub Actions - CI/CD on every push
@@ -44,21 +38,20 @@ Authentication - Supabase Auth with RLS
 
 💰 Zero Cost Tech Stack
 
-ComponentTechCostFrontendNext.js 15 + React 19FreeBackendNext.js API RoutesFreeDatabaseSupabase (PostgreSQL + pgvector)Free tierAuthSupabase AuthFree tierStorageSupabase StorageFree tierEmbeddingsSentence-Transformers (local)FreeLLMGoogle Gemini 2.5 FlashFree tier (60k req/day)HostingVercelFree tierTOTAL$0
+ComponentTechCostFrontendNext.js 15 + React 19FreeBackendNext.js API RoutesFreeDatabaseSupabase (PostgreSQL + pgvector)Free tierAuthSupabase AuthFree tierStorageSupabase StorageFree tierEmbeddingsSentence-Transformers (local)FreeLLMGoogle Gemini 2.5 FlashFree tier (60k req/day)HostingVercelFree tier
+
+TOTAL$0
 
 
 🎯 Quick Start
 
 Prerequisites
-
-
 Node.js 18+
 Supabase account (free)
 Google Gemini API key (free)
 
 
 Installation
-
 bash# Clone repo
 git clone https://github.com/YOUR_USERNAME/pulse-ai.git
 cd pulse-ai
