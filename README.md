@@ -1,65 +1,58 @@
-Pulse AI - Health Timeline AI 🏥
+# Pulse AI — Health Timeline AI 🏥
 
-AI-powered medical record management with semantic search, streaming chat, and health trends visualization.
-
-
-Features:
-
-RAG System (Retrieval-Augmented Generation)
-PDF Upload & Storage - Secure file upload to Supabase
-Smart Text Extraction - Intelligent chunking (breaks at sentences, not mid-word)
-Local Embeddings - 384-dimensional vectors via Sentence-Transformers (no API calls)
-Semantic Search - pgvector similarity search with cosine distance
-Source Citations - AI responses include exact sources + page numbers
+AI-powered medical record management with semantic search (RAG), streaming chat, and health trends visualization.
 
 
-Streaming Chat
-Real-time Typing Effect - Watch responses stream in like ChatGPT
-RAG Context - Automatically finds relevant health records
-Citation Cards - See exactly where the AI got its information
-Multi-report Support - Chat about specific or all reports
+##  Features
+
+###  RAG System (Retrieval-Augmented Generation)
+- **PDF Upload & Storage** — Secure file upload to Supabase Storage
+- **Smart Text Extraction** — `pdf-parse` extracts text, chunked intelligently (breaks at sentence boundaries, never mid-word)
+- **Local Embeddings** — 384-dimensional vectors generated on-device via `@xenova/transformers` (`Xenova/all-MiniLM-L6-v2`) — no external API calls, no latency, no cost
+- **Semantic Search** — `pgvector` similarity search inside Supabase, with a JS cosine-similarity fallback
+- **Source Citations** — every AI answer links back to the exact chunk + report it came from
+
+### Streaming Chat
+- **Real-time typing effect** — responses stream token-by-token, ChatGPT-style
+- **RAG-grounded answers** — automatically retrieves the most relevant health record chunks before answering
+- **Citation cards** — see exactly which source the AI pulled from
+- **Multi-report support** — chat about one specific report or your entire history
+
+### Design System
+- Clean, monochromatic blue palette with a soft gradient background
+- **Instrument Serif (italic)** for headings — gives the product an editorial, premium feel instead of the generic SaaS look
+
+### Production Ready
+- Full **TypeScript** coverage
+- **Jest** test suite + **GitHub Actions** CI/CD on every push
+- Graceful error handling with clear user feedback
+- **Supabase Auth** with Row-Level Security (RLS)
+
+## Zero-Cost Tech Stack
+
+| Component | Tech 
+| Frontend | Next.js 15 + React 19 
+| Backend | Next.js API Routes 
+| Database | Supabase (PostgreSQL + pgvector) 
+| Auth | Supabase Auth 
+| Storage | Supabase Storage
+| Embeddings | `@xenova/transformers` (local, on-device) 
+| Document Extraction & Answers | Google Gemini 2.5 Flash
+| Hosting | Vercel
 
 
-Health Trends
-Interactive Charts - Bar graphs of metrics over time
-Auto-Detection - eg. Parses cholesterol, blood pressure, weight, HbA1c from reports
-Stats Summary - Latest value, average, and change indicators
-Comparison - Side-by-side report comparison with trend arrows
+### Prerequisites
+- Node.js 18+
+- Supabase account 
+- Google Gemini API key
 
+### Installation
 
-Production Ready
-Type Safety - Full TypeScript coverage
-Jest Tests - Automated test suite
-GitHub Actions - CI/CD on every push
-Error Handling - Graceful failures + user feedback
-Authentication - Supabase Auth with RLS
-
-
-
-💰 Zero Cost Tech Stack
-
-ComponentTechCostFrontendNext.js 15 + React 19FreeBackendNext.js API RoutesFreeDatabaseSupabase (PostgreSQL + pgvector)Free tierAuthSupabase AuthFree tierStorageSupabase StorageFree tierEmbeddingsSentence-Transformers (local)FreeLLMGoogle Gemini 2.5 FlashFree tier (60k req/day)HostingVercelFree tier
-
-TOTAL$0
-
-
-🎯 Quick Start
-
-Prerequisites
-Node.js 18+
-Supabase account (free)
-Google Gemini API key (free)
-
-
-Installation
-bash# Clone repo
+```bash
 git clone https://github.com/YOUR_USERNAME/pulse-ai.git
 cd pulse-ai
-
-# Install dependencies
 npm install
 
-# Create .env.local
 cat > .env.local << EOF
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
@@ -67,17 +60,16 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 GEMINI_API_KEY=your_gemini_api_key
 EOF
 
-# Run dev server
 npm run dev
+```
 
-Visit http://localhost:3000/dashboard
+Visit `http://localhost:3000/login` 
 
 
-📋 Database Setup
+## Database Setup
 
-Create Tables (SQL)
-
-sqlCREATE EXTENSION IF NOT EXISTS vector;
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE reports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -85,6 +77,7 @@ CREATE TABLE reports (
   file_name TEXT NOT NULL,
   file_url TEXT NOT NULL,
   extracted_text TEXT,
+  summary TEXT,
   created_at TIMESTAMP DEFAULT now()
 );
 
@@ -99,37 +92,35 @@ CREATE TABLE report_chunks (
   created_at TIMESTAMP DEFAULT now()
 );
 
--- Enable RLS
 ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE report_chunks ENABLE ROW LEVEL SECURITY;
 
--- Policies
-CREATE POLICY "users_access_own_reports" 
+CREATE POLICY "users_access_own_reports"
   ON reports FOR ALL USING (auth.uid() = user_id);
-  
-CREATE POLICY "users_access_own_chunks" 
+
+CREATE POLICY "users_access_own_chunks"
   ON report_chunks FOR ALL USING (auth.uid() = user_id);
 
--- Index for fast search
-CREATE INDEX ON report_chunks USING ivfflat 
+CREATE INDEX ON report_chunks USING ivfflat
   (embedding vector_cosine_ops);
+```
 
-Storage Bucket
+**Storage bucket:** Supabase Dashboard → Storage → create `medical-reports` (Private)
 
+## API Routes
 
-Supabase Dashboard → Storage
-Create bucket: medical-reports
-Set to Private
+| Endpoint | Method | Purpose |
 
+| `/api/upload` | POST | Upload PDF file |
+| `/api/analyze-pdf` | POST | Whole-document AI summary (Gemini) |
+| `/api/process-pdf` | POST | Extract, chunk, and embed for RAG |
+| `/api/search` | POST | Semantic search via `search_chunks` RPC |
+| `/api/chat` | POST | Streaming AI chat, grounded in retrieved chunks |
 
+### Example: Upload → Process → Chat
 
-🔌 API Routes
-
-EndpointMethodPurpose/api/uploadPOSTUpload PDF file/api/process-pdfPOSTExtract text + chunk/api/generate-embeddingsPOSTGenerate vectors/api/searchPOSTSemantic search/api/chatPOSTStreaming AI chat
-
-Example: Upload & Chat
-
-typescript// 1. Upload
+```typescript
+// 1. Upload
 const uploadRes = await fetch('/api/upload', {
   method: 'POST',
   body: formData,
@@ -137,13 +128,10 @@ const uploadRes = await fetch('/api/upload', {
 });
 const { reportId } = await uploadRes.json();
 
-// 2. Process
+// 2. Process (extract + chunk + embed)
 await fetch('/api/process-pdf', {
   method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  },
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
   body: JSON.stringify({ reportId, fileUrl }),
 });
 
@@ -154,43 +142,43 @@ const chatRes = await fetch('/api/chat', {
   body: JSON.stringify({ question: 'Why did my cholesterol drop?', reportId }),
 });
 
-// 4. Read streaming response
+// 4. Stream the response
 const reader = chatRes.body.getReader();
 const decoder = new TextDecoder();
 while (true) {
   const { done, value } = await reader.read();
   if (done) break;
   const chunk = decoder.decode(value);
-  // Stream chunks to UI
+  // render chunk to UI
 }
+```
 
 
-🧪 Testing
+## Testing
 
-bash# Run all tests
-npm test
+```bash
+npm test               # run all tests
+npm run test:watch     # watch mode
+npm run test:coverage  # coverage report
+```
 
-# Watch mode
-npm run test:watch
-
-# Coverage report
-npm run test:coverage
-
-GitHub Actions runs tests on every push.
+GitHub Actions runs the full suite on every push.
 
 
-📦 Project Structure
+## Project Structure
 
+```
 pulse-ai/
 ├── app/
 │   ├── api/
 │   │   ├── upload/route.ts
+│   │   ├── analyze-pdf/route.ts
 │   │   ├── process-pdf/route.ts
-│   │   ├── generate-embeddings/route.ts
 │   │   ├── search/route.ts
 │   │   └── chat/route.ts
-│   └── dashboard/
-│       └── page.tsx
+│   ├── dashboard/page.tsx
+│   ├── timeline/page.tsx
+│   └── login/page.tsx
 ├── components/
 │   ├── UploadForm.tsx
 │   ├── ChatUI.tsx
@@ -200,182 +188,83 @@ pulse-ai/
 ├── hooks/
 │   └── useAuth.ts
 ├── __tests__/
-│   └── api/upload.test.ts
-├── .github/
-│   └── workflows/test.yml
+├── .github/workflows/test.yml
 ├── jest.config.js
-├── jest.setup.js
-└── DEPLOYMENT.md
-
-
-🚀 Deployment
-
-Deploy on Vercel (Free)
-
-
-Push to GitHub
-
-
-bashgit add .
-git commit -m "Initial commit: Pulse AI RAG system"
-git push origin main
-
-
-Connect to Vercel
-
-Go to vercel.com
-Click "New Project"
-Import your GitHub repo
-Click "Import"
-
-
-
-Add Environment Variables
-
-Settings → Environment Variables
-Add: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, GEMINI_API_KEY
-Click "Deploy"
-
-
-
-Get Live URL
-
-Vercel assigns: https://pulse-ai-xxx.vercel.app
-Share with recruiters!
-
-
-
-
-
-
-💡 How RAG Works
-
-User Upload PDF
-    ↓
-Extract Text (pdf-parse)
-    ↓
-Smart Chunk (~500 chars per chunk)
-    ↓
-Generate Embeddings (Sentence-Transformers)
-    ↓
-Store in pgvector (PostgreSQL)
-    ↓
-User Asks Question
-    ↓
-Embed Question (same model)
-    ↓
-Search pgvector (cosine similarity)
-    ↓
-Get Top 5 Chunks
-    ↓
-Send to Gemini (+ context)
-    ↓
-Stream Response (real-time)
-    ↓
-Return Answer + Citations
-
-
-🎯 What Makes This Portfolio Gold
-
-For Recruiters
-
-✅ RAG/Vector DB - Shows understanding of semantic search, embeddings, similarity algorithms
-✅ Streaming - Real-time APIs, SSE (Server-Sent Events), async patterns
-✅ Full-Stack - React frontend, Next.js backend, PostgreSQL database
-✅ DevOps - GitHub Actions CI/CD, environment management, deployment
-✅ AI Integration - Prompt engineering, LLM APIs, streaming responses
-✅ Production Ready - Type safety, testing, error handling, authentication
-
-Interview Talking Points
-
-
-"I built RAG using pgvector indexing for semantic search" - Shows vector DB knowledge
-"Implemented streaming responses with Server-Sent Events" - Shows real-time API skills
-"100% free stack - no paid APIs" - Shows cost optimization thinking
-"Type-safe TypeScript across frontend, backend, and database" - Shows discipline
-"Automated testing + GitHub Actions for every push" - Shows engineering maturity
-
-
-
-📚 Key Technologies Explained
-
-pgvector
-
-PostgreSQL extension for vector similarity search. Stores 384-dimensional embeddings and finds similar chunks using cosine distance.
-
-Sentence-Transformers
-
-Local embedding model (~100MB). Converts text to meaningful vectors. No API calls = no latency, no cost.
-
-Streaming
-
-Real-time response delivery. Server sends chunks as they arrive. User sees typing effect like ChatGPT.
-
-Citations
-
-Track which chunk the AI used. Display source + page number. Builds trust + verifiability.
-
-
-🔐 Security
-
-
-Row-Level Security (RLS) - Users see only their own data
-Supabase Auth - Secure authentication
-Environment Variables - No secrets in code
-Service Role Key - Only backend can access DB
-File Validation - PDF-only, size limits
-
-
-
-🐛 Troubleshooting
-
-Build fails locally?
-
-bashnpm run build
-
-Check for TypeScript errors.
-
-Embeddings slow on first request?
-
-
-Sentence-Transformers downloads model (~100MB) on first use
-Subsequent requests are instant
-
-
-Tests failing?
-
-bashnpm test -- --no-coverage
-
-Check test output for specific errors.
-
-Streaming not working?
-
-
-Vercel supports SSE by default
-Check browser Network tab for streaming chunks
-
-
-
-📖 Documentation
-
-
-DEPLOYMENT.md - Step-by-step deployment guide
-Database Schema - SQL setup instructions
-API Routes - Endpoint reference
-
-
-
-
- Author:
-
-Sneha Sharma
-CS Student | AI Web Engineering | Noida
-
-
-
-⭐ Show Your Support
-
-If this helps you learn , star the repo! ⭐
-
-
-Built with ❤️ 
+└── next.config.ts
+```
+
+
+##  Deployment (Vercel — Free)
+
+1. Push to GitHub
+   ```bash
+   git add .
+   git commit -m "Initial commit: Pulse AI RAG system"
+   git push origin main
+   ```
+2. Go to [vercel.com](https://vercel.com) → New Project → Import your repo
+3. Add environment variables: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`
+4. Deploy → share your live URL with recruiters
+
+
+## How RAG Works
+
+```
+Upload PDF
+   ↓
+Extract text (pdf-parse)
+   ↓
+Chunk intelligently (~500 chars, sentence-aware)
+   ↓
+Generate local embeddings (@xenova/transformers)
+   ↓
+Store vectors in Supabase (pgvector)
+   ↓
+User asks a question
+   ↓
+Embed the question (same model)
+   ↓
+Search pgvector for top-5 similar chunks
+   ↓
+Send chunks + question to Gemini 2.5 Flash
+   ↓
+Stream the answer back with citations
+```
+
+## Why This Is Portfolio-Grade
+
+- **RAG / Vector DB** — real semantic search, not keyword matching: embeddings, cosine similarity, pgvector indexing
+- **Streaming** — Server-Sent Events, real-time async patterns
+- **Full-stack** — React frontend, Next.js backend, PostgreSQL database, all type-safe
+- **DevOps** — CI/CD via GitHub Actions, environment management, Vercel deployment
+- **AI Integration** — prompt engineering, LLM APIs, retrieval-grounded generation
+- **Production discipline** — tests, error handling, RLS-secured auth
+
+**Interview talking points:**
+- "I built a RAG pipeline with local embeddings and pgvector for semantic search — no external embedding API, so it's fully free and low-latency."
+- "Chat responses are streamed via Server-Sent Events, with citations traced back to the exact source chunk."
+- "The whole stack — frontend, backend, DB, auth, embeddings — runs on free tiers, so the cost story is $0."
+- "TypeScript end-to-end, with Jest tests running automatically on every push via GitHub Actions."
+
+
+## Key Technologies, Briefly
+
+- **pgvector** — PostgreSQL extension for storing and searching vector embeddings using cosine distance
+- **`@xenova/transformers`** — runs a sentence-embedding model locally in JS, no server round-trip
+- **Streaming** — the server sends the response in pieces as they're generated, instead of making the user wait for the whole thing
+- **Citations** — every answer is traceable to a specific chunk + page, for verifiability
+
+
+## Security
+
+- Row-Level Security (RLS) — users can only ever see their own data
+- Supabase Auth (email/password)
+- No secrets committed to code — all via environment variables
+- Service Role Key is backend-only
+- PDF-only uploads, with size limits
+
+
+**Author:** Sneha Sharma
+CS Student · AI & Full-Stack Web Engineering · Noida
+
+⭐ If this helped you learn something, star the repo!
