@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { cosineSimilarity } from '@/lib/embeddings';
 
-// Initialize Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -29,16 +29,25 @@ interface SearchResponse {
 }
 
 async function getQueryEmbedding(text: string): Promise<number[]> {
+  console.log(`🔍 Generating query embedding for: "${text.substring(0, 50)}..."`);
+  
   const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
   const result = await model.embedContent(text);
-  return result.embedding.values;
+  
+  const embedding = result.embedding.values;
+  console.log(`✓ Query embedding: ${embedding.length} dimensions`);
+  
+  return embedding;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<SearchResponse>> {
   try {
+    console.log('=== SEARCH REQUEST STARTED ===');
+    
     // Verify authentication
     const authHeader = request.headers.get('authorization');
     if (!authHeader) {
+      console.error('✗ No authorization header');
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -52,166 +61,131 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
     } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
+      console.error('✗ Auth failed:', authError);
       return NextResponse.json(
         { success: false, error: 'Invalid authentication' },
         { status: 401 }
       );
     }
 
+    console.log(`✓ Authenticated user: ${user.id}`);
+
     // Get request body
     const { query, limit = 5, reportId } = await request.json();
 
     if (!query) {
+      console.error('✗ No query provided');
       return NextResponse.json(
         { success: false, error: 'query is required' },
         { status: 400 }
       );
     }
 
+    console.log(`📝 Query: "${query}"`);
+    console.log(`📊 Limit: ${limit}${reportId ? `, Report: ${reportId}` : ''}`);
+
     // Generate embedding for query
     const queryEmbedding = await getQueryEmbedding(query);
 
-    console.log(`Query: "${query}"`);
-    console.log(`Query embedding dimensions: ${queryEmbedding.length}`);
+    // Fetch all chunks with embeddings for this user (with optional report filter)
+    console.log('🔎 Fetching chunks from database...');
+    
+    let queryBuilder = supabase
+      .from('report_chunks')
+      .select('id, text, report_id, page_number, embedding')
+      .eq('user_id', user.id)
+      .not('embedding', 'is', null);
 
-    // Build SQL query for similarity search
-    let sql = `
-      SELECT 
-        id,
-        text,
-        report_id,
-        page_number,
-        1 - (embedding <=> $1::vector) as similarity
-      FROM report_chunks
-      WHERE user_id = $2
-    `;
-
-    const params: any[] = [JSON.stringify(queryEmbedding), user.id];
-
-    // Optional: filter by specific report
     if (reportId) {
-      sql += ` AND report_id = $3`;
-      params.push(reportId);
+      queryBuilder = queryBuilder.eq('report_id', reportId);
     }
 
-    sql += `
-      ORDER BY similarity DESC
-      LIMIT $${params.length + 1}
-    `;
+    const { data: allChunks, error: fetchError } = await queryBuilder;
 
-    params.push(limit);
-
-    // Execute raw SQL query for vector similarity
-    const { data: results, error: searchError } = await supabase.rpc(
-      'search_chunks',
-      {
-        query_embedding: queryEmbedding,
-        match_limit: limit,
-        match_threshold: 0.1, // Lower threshold = broader search
-        user_id: user.id,
-        report_filter: reportId || null,
-      }
-    ).then((r: any) => {
-      // Fallback: if RPC doesn't exist, fetch all and filter in JS
-      if (r.error?.code === 'PGRST202') {
-        return { data: null, error: null };
-      }
-      return r;
-    });
-
-    // If RPC method doesn't exist, do client-side filtering
-    let searchResults: SearchResult[] = [];
-
-    if (results && results.length > 0) {
-      searchResults = results.map((r: any) => ({
-        id: r.id,
-        text: r.text,
-        similarity: r.similarity,
-        reportId: r.report_id,
-        pageNumber: r.page_number,
-      }));
-    } else {
-      // Fallback: fetch all chunks and calculate similarity in JavaScript
-      console.log('Using JavaScript-based similarity search (RPC not available)');
-
-      const { data: allChunks, error: fetchError } = await supabase
-        .from('report_chunks')
-        .select('id, text, report_id, page_number, embedding')
-        .eq('user_id', user.id)
-        .not('embedding', 'is', null);
-
-      if (fetchError) {
-        console.error('Fetch error:', fetchError);
-        return NextResponse.json(
-          { success: false, error: 'Failed to fetch chunks' },
-          { status: 500 }
-        );
-      }
-
-      if (allChunks && allChunks.length > 0) {
-        // Calculate cosine similarity
-        const cosineSimilarity = (a: number[], b: number[]): number => {
-          let dotProduct = 0;
-          let normA = 0;
-          let normB = 0;
-
-          for (let i = 0; i < a.length; i++) {
-            dotProduct += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
-          }
-
-          normA = Math.sqrt(normA);
-          normB = Math.sqrt(normB);
-
-          return dotProduct / (normA * normB);
-        };
-
-        // Calculate similarities
-        const similarities = allChunks
-          .map((chunk: any) => ({
-            id: chunk.id,
-            text: chunk.text,
-            reportId: chunk.report_id,
-            pageNumber: chunk.page_number,
-            similarity: cosineSimilarity(queryEmbedding, chunk.embedding),
-          }))
-          .sort((a, b) => b.similarity - a.similarity)
-          .slice(0, limit);
-
-        searchResults = similarities;
-      }
+    if (fetchError) {
+      console.error('✗ Fetch error:', fetchError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to fetch chunks' },
+        { status: 500 }
+      );
     }
 
-    if (searchResults.length === 0) {
+    if (!allChunks || allChunks.length === 0) {
+      console.warn('⚠ No chunks with embeddings found');
       return NextResponse.json(
         {
           success: true,
           results: [],
           query,
           count: 0,
-          message: 'No similar chunks found',
+          message: 'No chunks with embeddings found. Please generate embeddings first.',
         },
         { status: 200 }
       );
     }
 
-    console.log(`Found ${searchResults.length} similar chunks`);
+    console.log(`✓ Found ${allChunks.length} chunks with embeddings`);
+
+    // Parse embeddings and calculate similarities
+    console.log('📐 Calculating similarities...');
+    
+    const similarities = allChunks
+      .map((chunk: any) => {
+        try {
+          // Parse embedding if it's a string
+          let embedding = chunk.embedding;
+          if (typeof embedding === 'string') {
+            embedding = JSON.parse(embedding);
+          }
+
+          // Validate embedding
+          if (!Array.isArray(embedding) || embedding.length === 0) {
+            console.warn(`⚠ Invalid embedding for chunk ${chunk.id}`);
+            return null;
+          }
+
+          const similarity = cosineSimilarity(queryEmbedding, embedding);
+          
+          return {
+            id: chunk.id,
+            text: chunk.text,
+            reportId: chunk.report_id,
+            pageNumber: chunk.page_number,
+            similarity,
+          };
+        } catch (err) {
+          console.error(`✗ Error processing chunk ${chunk.id}:`, err);
+          return null;
+        }
+      })
+      .filter((item): item is any => item !== null)
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, limit);
+
+    console.log(`✓ Top ${similarities.length} results:`);
+    similarities.forEach((result, idx) => {
+      console.log(`  ${idx + 1}. Similarity: ${(result.similarity * 100).toFixed(1)}% - ${result.text.substring(0, 50)}...`);
+    });
+
+    console.log('=== SEARCH REQUEST COMPLETE ===\n');
 
     return NextResponse.json(
       {
         success: true,
-        results: searchResults,
+        results: similarities,
         query,
-        count: searchResults.length,
-        message: `Found ${searchResults.length} relevant chunks`,
+        count: similarities.length,
+        message: similarities.length > 0 
+          ? `Found ${similarities.length} relevant chunks`
+          : 'No similar chunks found',
       },
       { status: 200 }
     );
   } catch (error) {
-    console.error('Search error:', error);
+    console.error('✗ Search error:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { success: false, error: `Internal server error: ${(error as any).message}` },
+      { success: false, error: `Internal server error: ${errorMsg}` },
       { status: 500 }
     );
   }

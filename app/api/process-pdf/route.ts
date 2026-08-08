@@ -63,7 +63,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
     }
 
     // Parse request body
-    const { reportId, filePath } = await request.json(); // Changed from fileUrl to filePath
+    const { reportId, filePath } = await request.json();
 
     if (!reportId || !filePath) {
       return NextResponse.json(
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
       );
     }
 
-    // Download PDF directly from Supabase using SDK (better than signed URLs)
+    // Download PDF directly from Supabase using SDK
     let pdfBuffer: ArrayBuffer;
     try {
       const { data, error: downloadError } = await supabase.storage
@@ -129,52 +129,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
       );
     }
 
-    // Generate embeddings via Gemini
+    // Create chunk records (embeddings will be generated separately by /api/generate-embeddings)
     let chunkRecords: any[] = [];
-    try {
-      const apiKey = process.env.GEMINI_API_KEY!;
-
-      for (let index = 0; index < chunks.length; index++) {
-        const chunk = chunks[index];
-
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${apiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              content: { parts: [{ text: chunk }] },
-            }),
-          }
-        );
-
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`Gemini embedding failed: ${errText}`);
-        }
-
-        const data = await res.json();
-        const embedding = data.embedding.values;
-
-        chunkRecords.push({
-          user_id: user.id,
-          report_id: reportId,
-          text: chunk,
-          chunk_index: index,
-          page_number: 1,
-          embedding,
-        });
-      }
-    } catch (embedError) {
-      console.error('Embedding generation error:', embedError);
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Failed to generate embeddings: ${embedError instanceof Error ? embedError.message : String(embedError)}`,
-        },
-        { status: 500 }
-      );
-    }
+    chunks.forEach((chunk, index) => {
+      chunkRecords.push({
+        user_id: user.id,
+        report_id: reportId,
+        text: chunk,
+        chunk_index: index,
+        page_number: 1,
+        embedding: null,
+      });
+    });
 
     // Store chunks in database
     const { data: insertedChunks, error: insertError } = await supabase
@@ -209,7 +175,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProcessRe
         success: true,
         reportId,
         chunksCreated: insertedChunks?.length || 0,
-        message: `Successfully created ${insertedChunks?.length || 0} chunks with embeddings.`,
+        message: `Successfully created ${insertedChunks?.length || 0} chunks. Run /api/generate-embeddings next.`,
       },
       { status: 200 }
     );

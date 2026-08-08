@@ -55,14 +55,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
       );
     }
 
-    // Validate file type
-    if (file.type !== 'application/pdf') {
-      return NextResponse.json(
-        { success: false, error: 'Only PDF files are allowed' },
-        { status: 400 }
-      );
-    }
-
     // Validate file size (max 10MB)
     const maxSize = 10 * 1024 * 1024; // 10MB
     if (file.size > maxSize) {
@@ -83,7 +75,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<UploadRes
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('medical-reports')
       .upload(fileName, buffer, {
-        contentType: 'application/pdf',
+        contentType: file.type || 'application/octet-stream',
       });
 
     if (uploadError) {

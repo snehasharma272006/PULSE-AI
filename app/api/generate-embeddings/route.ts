@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import { getEmbeddingsBatch } from '@/lib/embeddings';
+import { getEmbeddingsBatch, formatEmbeddingForDB, validateEmbeddingDimension } from '@/lib/embeddings';
 
 // Initialize Supabase
 const supabase = createClient(
@@ -20,9 +20,12 @@ interface EmbeddingResponse {
 
 export async function POST(request: NextRequest): Promise<NextResponse<EmbeddingResponse>> {
   try {
+    console.log('=== EMBEDDING REQUEST STARTED ===');
+    
     // Verify authentication
     const authHeader = request.headers.get('authorization');
     if (!authHeader) {
+      console.error('✗ No authorization header');
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -36,21 +39,27 @@ export async function POST(request: NextRequest): Promise<NextResponse<Embedding
     } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
+      console.error('✗ Auth failed:', authError);
       return NextResponse.json(
         { success: false, error: 'Invalid authentication' },
         { status: 401 }
       );
     }
 
+    console.log(`✓ Authenticated user: ${user.id}`);
+
     // Get request body
     const { reportId } = await request.json();
 
     if (!reportId) {
+      console.error('✗ Missing reportId');
       return NextResponse.json(
         { success: false, error: 'reportId is required' },
         { status: 400 }
       );
     }
+
+    console.log(`📋 Processing report: ${reportId}`);
 
     // Fetch chunks that don't have embeddings yet
     const { data: chunks, error: fetchError } = await supabase
@@ -58,10 +67,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<Embedding
       .select('id, text, chunk_index')
       .eq('report_id', reportId)
       .eq('user_id', user.id)
-      .is('embedding', null);  // Only get chunks without embeddings
+      .is('embedding', null);
 
     if (fetchError) {
-      console.error('Fetch chunks error:', fetchError);
+      console.error('✗ Fetch chunks error:', fetchError);
       return NextResponse.json(
         { success: false, error: 'Failed to fetch chunks' },
         { status: 500 }
@@ -69,13 +78,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<Embedding
     }
 
     if (!chunks || chunks.length === 0) {
+      console.warn('⚠ No chunks found without embeddings');
       return NextResponse.json(
         { success: false, error: 'No chunks found or already embedded' },
         { status: 400 }
       );
     }
 
-    console.log(`Processing ${chunks.length} chunks for embeddings...`);
+    console.log(`🔍 Found ${chunks.length} chunks to embed`);
 
     // Generate embeddings with limited concurrency + retries, tracking failures
     const { succeeded, failed } = await getEmbeddingsBatch(
@@ -83,46 +93,71 @@ export async function POST(request: NextRequest): Promise<NextResponse<Embedding
       { concurrency: 5 }
     );
 
-    const embeddings = succeeded.map((s) => ({ id: s.id, embedding: s.embedding }));
+    const embeddings = succeeded.map((s) => {
+      // Validate embedding dimension (Gemini produces 768-dim vectors)
+      validateEmbeddingDimension(s.embedding, 768);
+      return { id: s.id, embedding: s.embedding };
+    });
 
     if (failed.length > 0) {
-      console.error(
-        `Failed to embed ${failed.length}/${chunks.length} chunks:`,
-        failed.map((f) => `id=${f.id} error=${f.error}`).join('; ')
+      console.warn(
+        `⚠ Failed to embed ${failed.length}/${chunks.length} chunks:`
       );
+      failed.forEach((f) => {
+        console.warn(`  - ${f.id}: ${f.error}`);
+      });
     }
 
     if (embeddings.length === 0) {
+      console.error('✗ Failed to generate embeddings for any chunks');
       return NextResponse.json(
         { success: false, error: 'Failed to generate embeddings for any chunks' },
         { status: 500 }
       );
     }
 
-    console.log(`Generated ${embeddings.length} embeddings, now updating database...`);
+    console.log(`✓ Generated ${embeddings.length} embeddings, now updating database...`);
 
     // Update database with embeddings (batch updates)
     let successCount = 0;
-    for (const { id, embedding } of embeddings) {
-      const { error: updateError } = await supabase
-        .from('report_chunks')
-        .update({ embedding })
-        .eq('id', id)
-        .eq('user_id', user.id);
+    let updateErrors: string[] = [];
 
-      if (updateError) {
-        console.error(`Error updating chunk ${id}:`, updateError);
-      } else {
-        successCount++;
+    for (const { id, embedding } of embeddings) {
+      try {
+        // Format embedding for pgvector
+        const formattedEmbedding = formatEmbeddingForDB(embedding);
+
+        const { error: updateError } = await supabase
+          .from('report_chunks')
+          .update({ embedding: formattedEmbedding })
+          .eq('id', id)
+          .eq('user_id', user.id);
+
+        if (updateError) {
+          console.error(`✗ Error updating chunk ${id}:`, updateError);
+          updateErrors.push(`${id}: ${updateError.message}`);
+        } else {
+          successCount++;
+          console.log(`  ✓ Updated ${id}`);
+        }
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error(`✗ Exception updating chunk ${id}:`, errMsg);
+        updateErrors.push(`${id}: ${errMsg}`);
       }
     }
 
     if (successCount === 0) {
+      console.error('✗ Failed to update any chunks with embeddings');
+      console.error('Update errors:', updateErrors);
       return NextResponse.json(
-        { success: false, error: 'Failed to update any chunks with embeddings' },
+        { success: false, error: 'Failed to update any chunks with embeddings', message: updateErrors.join('; ') },
         { status: 500 }
       );
     }
+
+    console.log(`✓ Successfully embedded ${successCount}/${chunks.length} chunks`);
+    console.log('=== EMBEDDING REQUEST COMPLETE ===\n');
 
     return NextResponse.json(
       {
@@ -138,9 +173,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<Embedding
       { status: 200 }
     );
   } catch (error) {
-    console.error('Embedding error:', error);
+    console.error('✗ Embedding error:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { success: false, error: `Internal server error: ${(error as any).message}` },
+      { success: false, error: `Internal server error: ${errorMsg}` },
       { status: 500 }
     );
   }
