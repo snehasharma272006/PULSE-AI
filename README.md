@@ -1,20 +1,21 @@
 # Pulse AI — Health Timeline AI 
 
-AI-powered medical record management with semantic search (RAG), streaming chat, and health trends visualization.
+AI-powered medical record management with **agentic RAG** (retrieval-augmented generation orchestrated by LangGraph), streaming chat, and health trends visualization.
 
 
 ##  Features
 
-###  RAG System (Retrieval-Augmented Generation)
+###  Agentic RAG System (LangGraph-Orchestrated)
 - **PDF Upload & Storage** — Secure file upload to Supabase Storage
 - **Smart Text Extraction** — `pdf-parse` extracts text, chunked intelligently (breaks at sentence boundaries, never mid-word)
 - **Local Embeddings** — 384-dimensional vectors generated on-device via `@xenova/transformers` (`Xenova/all-MiniLM-L6-v2`) — no external API calls, no latency, no cost
 - **Semantic Search** — `pgvector` similarity search inside Supabase, with a JS cosine-similarity fallback
+- **Intent-Routed Chat** — a LangGraph agent classifies each user query and routes it to the right node: plain RAG retrieval, trend lookup, report comparison, or a multi-step chain for compound questions
 - **Source Citations** — every AI answer links back to the exact chunk + report it came from
 
 ### Streaming Chat
 - **Real-time typing effect** — responses stream token-by-token, ChatGPT-style
-- **RAG-grounded answers** — automatically retrieves the most relevant health record chunks before answering
+- **Agentic, RAG-grounded answers** — the graph retrieves, computes, or compares before composing a final answer
 - **Citation cards** — see exactly which source the AI pulled from
 - **Multi-report support** — chat about one specific report or your entire history
 
@@ -33,6 +34,8 @@ AI-powered medical record management with semantic search (RAG), streaming chat,
 | Component | Tech 
 | Frontend | Next.js 15 + React 19 
 | Backend | Next.js API Routes 
+| Agent Orchestration | LangGraph (routing, looping, multi-step chat logic) 
+| Retrieval/Prompt Plumbing | LangChain (used inside individual graph nodes) 
 | Database | Supabase (PostgreSQL + pgvector) 
 | Auth | Supabase Auth 
 | Storage | Supabase Storage
@@ -112,10 +115,10 @@ CREATE INDEX ON report_chunks USING ivfflat
 | Endpoint | Method | Purpose |
 
 | `/api/upload` | POST | Upload PDF file |
-| `/api/analyze-pdf` | POST | Whole-document AI summary (Gemini) |
+| `/api/analyze-pdf` | POST | Whole-document AI summary (Gemini), returns structured JSON |
 | `/api/process-pdf` | POST | Extract, chunk, and embed for RAG |
 | `/api/search` | POST | Semantic search via `search_chunks` RPC |
-| `/api/chat` | POST | Streaming AI chat, grounded in retrieved chunks |
+| `/api/chat` | POST | Streaming AI chat — internally runs the LangGraph agent (intent classification → retrieval/computation → composition) |
 
 ### Example: Upload → Process → Chat
 
@@ -135,7 +138,7 @@ await fetch('/api/process-pdf', {
   body: JSON.stringify({ reportId, fileUrl }),
 });
 
-// 3. Chat
+// 3. Chat (agentic — the graph decides how to answer)
 const chatRes = await fetch('/api/chat', {
   method: 'POST',
   headers: { Authorization: `Bearer ${token}` },
@@ -185,6 +188,10 @@ pulse-ai/
 │   ├── ReportsList.tsx
 │   ├── TrendsChart.tsx
 │   └── ReportComparison.tsx
+├── lib/
+│   └── graph/
+│       ├── state.ts        # LangGraph shared state definition
+│       └── graph.ts        # Graph wiring: nodes, edges, routing logic
 ├── hooks/
 │   └── useAuth.ts
 ├── __tests__/
@@ -207,7 +214,11 @@ pulse-ai/
 4. Deploy → share your live URL with recruiters
 
 
-## How RAG Works
+## System Architecture
+
+Pulse AI splits its intelligence into two deliberately different halves: a **deterministic pipeline** for uploads (predictable, one-path, no decisions to make) and an **agentic graph** for chat (open-ended, needs to decide *how* to answer before it answers).
+
+### 1. Upload → Summary Pipeline (deterministic, no agent)
 
 ```
 Upload PDF
@@ -220,35 +231,82 @@ Generate local embeddings (@xenova/transformers)
    ↓
 Store vectors in Supabase (pgvector)
    ↓
-User asks a question
-   ↓
-Embed the question (same model)
-   ↓
-Search pgvector for top-5 similar chunks
-   ↓
-Send chunks + question to Gemini 2.5 Flash
-   ↓
-Stream the answer back with citations
+Gemini generates a STRUCTURED JSON summary (not loose prose)
 ```
 
-## Why This Is Portfolio-Grade
+The summary call is constrained to a strict schema so the dashboard can render real charts and flagged values instead of parsing prose:
 
-- **RAG / Vector DB** — real semantic search, not keyword matching: embeddings, cosine similarity, pgvector indexing
-- **Streaming** — Server-Sent Events, real-time async patterns
-- **Full-stack** — React frontend, Next.js backend, PostgreSQL database, all type-safe
-- **DevOps** — CI/CD via GitHub Actions, environment management, Vercel deployment
-- **AI Integration** — prompt engineering, LLM APIs, retrieval-grounded generation
-- **Production discipline** — tests, error handling, RLS-secured auth
+```json
+{
+  "summary": "string",
+  "key_metrics": [
+    { "name": "Cholesterol", "value": 210, "unit": "mg/dL", "flagged": true }
+  ],
+  "concerns": ["string"],
+  "recommended_followup": "string"
+}
+```
 
-**Interview talking points:**
-- "I built a RAG pipeline with local embeddings and pgvector for semantic search — no external embedding API, so it's fully free and low-latency."
-- "Chat responses are streamed via Server-Sent Events, with citations traced back to the exact source chunk."
-- "The whole stack — frontend, backend, DB, auth, embeddings — runs on free tiers, so the cost story is $0."
-- "TypeScript end-to-end, with Jest tests running automatically on every push via GitHub Actions."
+`key_metrics` becomes a shared data source that the chatbot's trend/comparison nodes query directly — no need to re-parse raw PDF text on every chat turn.
+
+### 2. Chatbot — Agentic RAG (LangGraph)
+
+Unlike the upload pipeline, chat has open-ended user intent, so this is where the actual "agent" behavior lives: an LLM node classifies the query, then routes it down one of several paths.
+
+```
+User Query
+    │
+    ▼
+[Classify Intent]  ← LLM decides the path
+    │
+    ├─→ [RAG Chat]        → retrieve chunks → generate + cite → stream
+    │
+    ├─→ [Trend Query]     → get_metric_trend → summarize
+    │
+    ├─→ [Comparison]      → compare_reports → check_reference_range → summarize
+    │
+    └─→ [Multi-part]      → loop: retrieve → check if enough → call more nodes → combine
+                                        │
+                                        ▼
+                              [Compose Final Answer] → stream to user
+```
+
+**Design decisions worth knowing:**
+- **LangGraph** owns routing and looping — the actual "agentic" part of the system.
+- **LangChain** (used internally, optional by design) handles retrieval/prompt plumbing inside individual nodes.
+- Reference-range checks and report comparisons are **deterministic code** (lookup tables, existing parser) rather than LLM-generated medical interpretation — safer output, easier to debug.
+- Loop depth is capped at ~2–3 hops for multi-part queries, to keep latency and cost predictable.
+
+### Node Layer — Callable Tools (mini API reference)
+
+| Node / Tool | Signature | Purpose |
+
+| `retrieve_chunks` | `(query, reportId?)` | Existing pgvector semantic search over report chunks |
+| `get_metric_trend` | `(metric, dateRange)` | Pulls a metric's values over time for trend answers |
+| `compare_reports` | `(reportIdA, reportIdB)` | Diffs key metrics between two reports |
+| `check_reference_range` | `(metric, value)` | Flags whether a value is outside the normal clinical range (deterministic, not LLM-judged) |
+
+### What Changed vs. the Original RAG Version
+
+| Component | After |
+
+| Upload → Summary | Structured JSON output (still a deterministic pipeline, no agent) |
+| Chatbot | Agentic RAG via LangGraph (route → retrieve/compute → compose) |
+| Trend/Comparison logic | Dedicated LangGraph nodes, deterministic computation underneath |
+| Retrieval (pgvector, local embeddings)| reused as a tool inside LangGraph nodes |
+
+
+**CHANGES**
+- migrated the chatbot from simple retrieve-then-answer RAG to an agentic system with LangGraph — the model first classifies intent, then routes to retrieval, trend analysis, comparison, or a multi-hop chain before composing the final answer.
+- deliberately kept the upload/summary pipeline deterministic and separate from the agentic layer — no need for an LLM to make routing decisions on a single-document, single-output task
+- reference-range checks and report comparisons are computed in code, not inferred by the LLM, which keeps medical output safer and easier to debug.
+- TypeScript end-to-end, with Jest tests running automatically on every push via GitHub Actions.
 
 
 ## Key Technologies, Briefly
 
+- **LangGraph** — a library for building the "brain" of an agent as a graph: each node is a step (classify, retrieve, compute), and edges decide what happens next based on the LLM's decision. Think of it as a flowchart the AI can dynamically walk through, instead of one straight-line prompt.
+- **LangChain** — a toolkit for the plumbing around LLM calls (prompt templates, output parsers). Used inside individual LangGraph nodes, not for orchestration itself.
 - **pgvector** — PostgreSQL extension for storing and searching vector embeddings using cosine distance
 - **`@xenova/transformers`** — runs a sentence-embedding model locally in JS, no server round-trip
 - **Streaming** — the server sends the response in pieces as they're generated, instead of making the user wait for the whole thing
@@ -267,4 +325,4 @@ Stream the answer back with citations
 **Author:** Sneha Sharma
 CS Student · AI & Full-Stack Web Engineering · Noida
 
-⭐ If this helped you learn something, star the repo!
+⭐
