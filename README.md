@@ -1,4 +1,4 @@
-# Pulse AI — Health Timeline AI 🏥
+# Pulse AI — Health Timeline AI 
 
 AI-powered medical record management with semantic search (RAG), streaming chat, and health trends visualization.
 
