@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { graph } from "@/lib/graph/graph";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,70 +9,6 @@ const supabase = createClient(
 );
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-
-async function getQueryEmbedding(text: string): Promise<number[]> {
-  const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
-  const result = await model.embedContent(text);
-  return result.embedding.values;
-}
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
-
-  for (let i = 0; i < a.length; i++) {
-    dotProduct += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-
-  normA = Math.sqrt(normA);
-  normB = Math.sqrt(normB);
-
-  return dotProduct / (normA * normB);
-}
-
-async function searchRelevantChunks(
-  query: string,
-  userId: string,
-  reportId?: string,
-  limit: number = 5
-): Promise<Array<{ text: string; reportId: string; pageNumber: number }>> {
-  const queryEmbedding = await getQueryEmbedding(query);
-
-  let query_db = supabase
-    .from("report_chunks")
-    .select("text, report_id, page_number, embedding")
-    .eq("user_id", userId)
-    .not("embedding", "is", null);
-
-  if (reportId) {
-    query_db = query_db.eq("report_id", reportId);
-  }
-
-  const { data: chunks } = await query_db;
-
-  if (!chunks || chunks.length === 0) {
-    return [];
-  }
-
-  const similarities = chunks
-    .map((chunk: any) => ({
-      text: chunk.text,
-      reportId: chunk.report_id,
-      pageNumber: chunk.page_number,
-      similarity: cosineSimilarity(queryEmbedding, chunk.embedding),
-    }))
-    .sort((a, b) => b.similarity - a.similarity)
-    .slice(0, limit);
-
-  return similarities.map((s) => ({
-    text: s.text,
-    reportId: s.reportId,
-    pageNumber: s.pageNumber,
-  }));
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -96,8 +33,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No question provided" }, { status: 400 });
     }
 
-    // RAG: Search for relevant chunks
-    const relevantChunks = await searchRelevantChunks(question, user.id, reportId, 5);
+    // Agentic RAG: classify intent → route → retrieve/compute
+    const result = await graph.invoke({ question, userId: user.id, reportId });
+    const relevantChunks = result.chunks || [];
 
     const contextBlock =
       relevantChunks && relevantChunks.length > 0
@@ -119,7 +57,7 @@ Instructions:
 User's question: ${question}`;
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    
+
     // Use streaming
     const stream = await model.generateContentStream(prompt);
 

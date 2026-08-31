@@ -1,7 +1,13 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { pipeline } from "@xenova/transformers";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const EMBEDDING_MODEL = "gemini-embedding-001";
+let embedder: any = null; // cached — model loads once per server instance, not per call
+
+async function getEmbedder() {
+  if (!embedder) {
+    embedder = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+  }
+  return embedder;
+}
 
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 500;
@@ -12,27 +18,26 @@ function sleep(ms: number) {
 
 /**
  * Embed a single piece of text, retrying on transient failures
- * (rate limits, network blips) with exponential backoff.
+ * (e.g. model still loading) with exponential backoff.
  */
 export async function getEmbedding(text: string, retries = MAX_RETRIES): Promise<number[]> {
-  const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL });
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const result = await model.embedContent(text);
-      const embedding = result.embedding.values;
-      
-      // Log embedding dimension on first success
+      const model = await getEmbedder();
+      const output = await model(text, { pooling: "mean", normalize: true });
+      const embedding = Array.from(output.data) as number[];
+
       if (attempt === 0) {
         console.log(`✓ Embedding generated: ${embedding.length} dimensions`);
       }
-      
+
       return embedding;
     } catch (error) {
       lastError = error;
       console.error(`✗ Embedding attempt ${attempt + 1}/${retries + 1} failed:`, error);
-      
+
       if (attempt < retries) {
         const delay = BASE_DELAY_MS * Math.pow(2, attempt);
         console.log(`  Retrying in ${delay}ms...`);
@@ -87,15 +92,14 @@ export async function getEmbeddingsBatch<T = unknown>(
     while (index < items.length) {
       const current = items[index++];
       console.log(`  [Worker ${workerId}] Processing chunk: ${current.id}`);
-      
+
       try {
         const embedding = await getEmbedding(current.text);
-        
-        // Validate embedding
+
         if (!Array.isArray(embedding) || embedding.length === 0) {
           throw new Error(`Invalid embedding: expected array, got ${typeof embedding}`);
         }
-        
+
         succeeded.push({ id: current.id, embedding, meta: current.meta });
         console.log(`  [Worker ${workerId}] ✓ ${current.id} (${embedding.length}d)`);
       } catch (error) {
@@ -124,14 +128,14 @@ export function formatEmbeddingForDB(embedding: number[]): string {
   if (!Array.isArray(embedding) || embedding.length === 0) {
     throw new Error('Invalid embedding: must be non-empty array');
   }
-  // pgvector expects: '[0.1, 0.2, 0.3]'::vector
   return `[${embedding.join(',')}]`;
 }
 
 /**
- * Validate embedding dimensions match expected size
+ * Validate embedding dimensions match expected size.
+ * 384 = Xenova/all-MiniLM-L6-v2's output size (was 768, Gemini's size).
  */
-export function validateEmbeddingDimension(embedding: number[], expectedDim: number = 768): boolean {
+export function validateEmbeddingDimension(embedding: number[], expectedDim: number = 384): boolean {
   if (!Array.isArray(embedding)) return false;
   if (embedding.length !== expectedDim) {
     console.warn(`Warning: embedding dimension ${embedding.length} != expected ${expectedDim}`);
