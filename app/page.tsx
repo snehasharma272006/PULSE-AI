@@ -6,7 +6,7 @@ const features = [
     icon: "📅",
     title: "Medical Timeline",
     description:
-      "Automatically organize years of health records into a single, coherent timeline — no manual sorting needed.",
+      "Automatically organize years of health records into a single, coherent timeline no manual sorting needed.",
   },
   {
     icon: "🧠",
@@ -18,7 +18,7 @@ const features = [
     icon: "💬",
     title: "Health Chat",
     description:
-      "Ask natural language questions about your records and get clear answers — not complex medical jargon.",
+      "Ask natural language questions about your records and get clear answers not complex medical jargon.",
   },
 ];
 
