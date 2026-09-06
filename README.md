@@ -326,3 +326,4 @@ User Query
 CS Student · AI & Full-Stack Web Engineering · Noida
 
 ⭐
+© 2026 Pulse AI. All rights reserved.
