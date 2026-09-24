@@ -54,12 +54,16 @@ function LoginForm() {
       if (error) {
         setError(error.message.toLowerCase().includes("already registered") ? "Unable to create account with these details." : error.message);
       } else {
+        router.refresh();
         router.push(nextPath);
       }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email: trimmedEmail, password });
       setError(error ? "Incorrect email or password." : "");
-      if (!error) router.push(nextPath);
+      if (!error) {
+        router.refresh();
+        router.push(nextPath);
+      }
     }
     setLoading(false);
   };
