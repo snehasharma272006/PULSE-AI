@@ -3,6 +3,13 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { Instrument_Serif } from "next/font/google";
+
+const serif = Instrument_Serif({
+  subsets: ["latin"],
+  weight: ["400"],
+  style: ["italic"],
+});
 
 type Report = {
   id: string;
@@ -311,16 +318,13 @@ export default function UploadPage() {
 
         {/* Header inside box */}
         <div className="text-center mb-10">
-          <p className="text-xs font-medium tracking-widest uppercase mb-3" style={{ color: "#5B8FC4" }}>
+          <p className="text-xs font-medium tracking-widest uppercase mb-4" style={{ color: "#5B8FC4" }}>
             Medical Records
           </p>
-          <h1
-            className="text-3xl"
-            style={{ fontFamily: "Georgia, serif", color: "var(--foreground)", fontStyle: "italic", fontWeight: "400", letterSpacing: "-0.01em" }}
-          >
-            Upload Documents
+          <h1 className={serif.className} style={{ fontSize: "36px", fontWeight: 700, color: "var(--foreground)", margin: 0 }}>
+            Upload your documents
           </h1>
-          <p className="text-xs mt-2" style={{ color: "rgba(27,35,51,0.6)" }}>
+          <p className="text-sm mt-4" style={{ color: "rgba(27,35,51,0.6)" }}>
             Your files are processed locally.
           </p>
         </div>
