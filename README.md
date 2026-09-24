@@ -321,6 +321,18 @@ User Query
 - Service Role Key is backend-only
 - PDF-only uploads, with size limits
 
+## Future scope 
+## Future Scope
+
+- **Doctor Consultation** — connect patients with verified clinicians for live 
+  video consults, with deterministic urgency triage (routine / urgent / critical) 
+  routing critical cases to immediate emergency guidance alongside doctor matching. 
+  Would require telehealth licensing compliance research before going beyond prototype.
+- **Emergency/Ambulance Locator** — geolocation-based lookup of nearby hospitals 
+  and emergency services via Google Places API or regional open-data APIs, with 
+  one-tap call-to-emergency-number and location sharing. Full ambulance dispatch 
+  automation depends on provider-specific APIs not yet integrated.
+
 
 **Author:** Sneha Sharma
 CS Student · AI & Full-Stack Web Engineering · Noida
