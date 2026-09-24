@@ -10,9 +10,16 @@ const playfair = Instrument_Serif({
   style: ["italic"],
 });
 
+type Citation = {
+  text: string;
+  page: number | null;
+  reportId: string;
+};
+
 type Message = {
   role: "user" | "assistant";
   content: string;
+  citations?: Citation[];
 };
 
 export default function ChatPage() {
@@ -62,7 +69,16 @@ export default function ChatPage() {
           if (event.type === "content") {
             setMessages((prev) => {
               const updated = [...prev];
-              updated[updated.length - 1] = { role: "assistant", content: updated[updated.length - 1].content + event.text };
+              const last = updated[updated.length - 1];
+              updated[updated.length - 1] = { ...last, role: "assistant", content: last.content + event.text };
+              return updated;
+            });
+          }
+          if (event.type === "citations") {
+            setMessages((prev) => {
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              updated[updated.length - 1] = { ...last, citations: event.citations };
               return updated;
             });
           }
@@ -125,12 +141,31 @@ export default function ChatPage() {
           </p>
         </div>
 
+        {/* Persistent medical disclaimer — always visible above the conversation */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "8px",
+            borderRadius: "12px",
+            padding: "10px 14px",
+            marginBottom: "20px",
+            background: "#FFF8E8",
+            border: "1px solid #F3DFA6",
+          }}
+        >
+          <span style={{ fontSize: "14px", lineHeight: 1.4 }}>⚠️</span>
+          <p style={{ fontSize: "12px", lineHeight: 1.5, color: "#8A6D1D", margin: 0 }}>
+            <strong>Not medical advice.</strong> Pulse AI&rsquo;s answers are for general information only and are not a diagnosis or a substitute for a qualified healthcare provider. Always confirm anything important with your doctor.
+          </p>
+        </div>
+
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "16px", marginBottom: "24px" }}>
           {messages.length === 0 ? (
             <div style={{ borderRadius: "16px", padding: "32px 24px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", background: "#F5F9FF", border: "1px solid #E2E9F7" }}>
               <span style={{ fontSize: "36px" }}>🩺💬</span>
-              <p style={{ fontSize: "14px", fontWeight: 500, color: "#4B5468", margin: 0 }}>Hey! I'm here to help you understand your health.</p>
-              <p style={{ fontSize: "12px", color: "#9AA3B5", margin: 0 }}>Try: "What did my last report show?" or "What does HbA1c mean?"</p>
+              <p style={{ fontSize: "14px", fontWeight: 500, color: "#4B5468", margin: 0 }}>Hey! I&rsquo;m here to help you understand your health.</p>
+              <p style={{ fontSize: "12px", color: "#9AA3B5", margin: 0 }}>Try: &ldquo;What did my last report show?&rdquo; or &ldquo;What does HbA1c mean?&rdquo;</p>
             </div>
           ) : (
             messages.map((msg, i) => (
@@ -146,17 +181,55 @@ export default function ChatPage() {
                 )}
                 <div
                   style={{
-                    borderRadius: "16px",
-                    padding: "14px 18px",
-                    fontSize: "14px",
-                    lineHeight: 1.6,
-                    whiteSpace: "pre-line",
-                    ...(msg.role === "user"
-                      ? { background: "#5B8DEF", color: "#ffffff" }
-                      : { background: "#F5F9FF", color: "#1B2333", border: "1px solid #E2E9F7" }),
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                    maxWidth: "100%",
                   }}
                 >
-                  {msg.content}
+                  <div
+                    style={{
+                      borderRadius: "16px",
+                      padding: "14px 18px",
+                      fontSize: "14px",
+                      lineHeight: 1.6,
+                      whiteSpace: "pre-line",
+                      ...(msg.role === "user"
+                        ? { background: "#5B8DEF", color: "#ffffff" }
+                        : { background: "#F5F9FF", color: "#1B2333", border: "1px solid #E2E9F7" }),
+                    }}
+                  >
+                    {msg.content}
+                  </div>
+
+                  {/* Source citations — exact page each answer drew from */}
+                  {msg.role === "assistant" && !!msg.citations?.length && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                      {msg.citations.map((c, ci) => (
+                        <span
+                          key={ci}
+                          title={c.text}
+                          style={{
+                            fontSize: "11px",
+                            padding: "4px 10px",
+                            borderRadius: "999px",
+                            background: "#EAF1FB",
+                            color: "#3D6FA0",
+                            border: "1px solid #C9DAF5",
+                          }}
+                        >
+                          📄 Source {ci + 1}{c.page ? ` · Page ${c.page}` : ""}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Per-answer medical disclaimer */}
+                  {msg.role === "assistant" && msg.content && (
+                    <p style={{ fontSize: "10.5px", color: "#B0B7C6", margin: 0 }}>
+                      ⚠️ General information only — not a medical diagnosis. Consult a doctor for medical decisions.
+                    </p>
+                  )}
                 </div>
               </div>
             ))

@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 const navLinks = [
   { label: "Home",      href: "/" },
@@ -13,7 +15,28 @@ const navLinks = [
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const lastScrollY = useRef(0);
+  const router = useRouter();
+
+  useEffect(() => {
+    // Check on mount, then stay in sync as the session changes
+    // (login/logout/token refresh) without needing a page reload.
+    supabase.auth.getUser().then(({ data: { user } }) => setIsLoggedIn(!!user));
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsLoggedIn(!!session?.user);
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setMenuOpen(false);
+    router.push("/");
+    router.refresh(); // makes sure middleware re-evaluates protected routes immediately
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -32,6 +55,14 @@ export default function Navbar() {
 
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 640) setMenuOpen(false);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   return (
@@ -91,29 +122,52 @@ export default function Navbar() {
           ))}
         </ul>
 
-        <Link
-          href="/login"
-          style={{
-            padding: "0.5rem 1.3rem",
-            borderRadius: "8px",
-            border: "1px solid #5B8FC4",
-            color: "#3D6FA0",
-            fontSize: "0.9rem",
-            fontWeight: 600,
-            textDecoration: "none",
-            whiteSpace: "nowrap",
-            transition: "all 0.2s ease",
-          }}
-        >
-          Login
-        </Link>
+        {isLoggedIn ? (
+          <button
+            onClick={handleLogout}
+            type="button"
+            style={{
+              padding: "0.5rem 1.3rem",
+              borderRadius: "8px",
+              border: "1px solid #5B8FC4",
+              color: "#3D6FA0",
+              fontSize: "0.9rem",
+              fontWeight: 600,
+              background: "transparent",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              transition: "all 0.2s ease",
+            }}
+          >
+            Logout
+          </button>
+        ) : (
+          <Link
+            href="/login"
+            style={{
+              padding: "0.5rem 1.3rem",
+              borderRadius: "8px",
+              border: "1px solid #5B8FC4",
+              color: "#3D6FA0",
+              fontSize: "0.9rem",
+              fontWeight: 600,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+              transition: "all 0.2s ease",
+            }}
+          >
+            Login
+          </Link>
+        )}
       </div>
 
       {/* Hamburger button (mobile only) */}
       <button
-        onClick={() => setMenuOpen(!menuOpen)}
+        onClick={() => setMenuOpen((open) => !open)}
         className="navbar-hamburger"
         aria-label="Toggle menu"
+        aria-expanded={menuOpen}
+        type="button"
         style={{
           display: "none",
           background: "transparent",
@@ -128,9 +182,36 @@ export default function Navbar() {
           cursor: "pointer",
         }}
       >
-        <span style={{ width: "16px", height: "2px", background: "#3D6FA0", display: "block" }} />
-        <span style={{ width: "16px", height: "2px", background: "#3D6FA0", display: "block" }} />
-        <span style={{ width: "16px", height: "2px", background: "#3D6FA0", display: "block" }} />
+        <span
+          style={{
+            width: "16px",
+            height: "2px",
+            background: "#3D6FA0",
+            display: "block",
+            transition: "transform 0.2s ease, opacity 0.2s ease",
+            transform: menuOpen ? "translateY(6px) rotate(45deg)" : "none",
+          }}
+        />
+        <span
+          style={{
+            width: "16px",
+            height: "2px",
+            background: "#3D6FA0",
+            display: "block",
+            transition: "opacity 0.2s ease",
+            opacity: menuOpen ? 0 : 1,
+          }}
+        />
+        <span
+          style={{
+            width: "16px",
+            height: "2px",
+            background: "#3D6FA0",
+            display: "block",
+            transition: "transform 0.2s ease, opacity 0.2s ease",
+            transform: menuOpen ? "translateY(-6px) rotate(-45deg)" : "none",
+          }}
+        />
       </button>
 
       {/* Mobile dropdown menu */}
@@ -138,7 +219,6 @@ export default function Navbar() {
         <div
           className="navbar-mobile-menu"
           style={{
-            display: "none",
             width: "100%",
             flexDirection: "column",
             gap: "1rem",
@@ -156,25 +236,44 @@ export default function Navbar() {
               </li>
             ))}
           </ul>
-          <Link
-            href="/login"
-            onClick={() => setMenuOpen(false)}
-            style={{
-              padding: "0.5rem 1.3rem",
-              borderRadius: "8px",
-              border: "1px solid #5B8FC4",
-              color: "#3D6FA0",
-              fontSize: "0.9rem",
-              fontWeight: 600,
-              textDecoration: "none",
-              textAlign: "center",
-            }}
-          >
-            Login
-          </Link>
+          {isLoggedIn ? (
+            <button
+              onClick={handleLogout}
+              type="button"
+              style={{
+                padding: "0.5rem 1.3rem",
+                borderRadius: "8px",
+                border: "1px solid #5B8FC4",
+                color: "#3D6FA0",
+                fontSize: "0.9rem",
+                fontWeight: 600,
+                background: "transparent",
+                cursor: "pointer",
+                textAlign: "center",
+              }}
+            >
+              Logout
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              onClick={() => setMenuOpen(false)}
+              style={{
+                padding: "0.5rem 1.3rem",
+                borderRadius: "8px",
+                border: "1px solid #5B8FC4",
+                color: "#3D6FA0",
+                fontSize: "0.9rem",
+                fontWeight: 600,
+                textDecoration: "none",
+                textAlign: "center",
+              }}
+            >
+              Login
+            </Link>
+          )}
         </div>
       )}
     </nav>
   );
 }
-

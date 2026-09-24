@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Instrument_Serif } from "next/font/google";
+import TrendsChart from "@/components/TrendsChart";
 
 const playfair = Instrument_Serif({
   subsets: ["latin"],
@@ -23,12 +24,14 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchReports = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      setUserId(user.id);
       const { data } = await supabase
         .from("reports")
         .select("*")
@@ -164,7 +167,7 @@ export default function DashboardPage() {
             Welcome back
           </h1>
           <p style={{ color: "rgba(27,35,51,0.55)", marginTop: "8px", fontSize: "14px", fontWeight: 300 }}>
-            Here's what's happening with your health records.
+            Here&rsquo;s what&rsquo;s happening with your health records.
           </p>
         </div>
 
@@ -202,6 +205,13 @@ export default function DashboardPage() {
             </div>
           ))}
         </div>
+
+        {/* Lab metrics over time — abnormal readings highlighted in bold red */}
+        {userId && (
+          <div style={{ marginBottom: "48px" }}>
+            <TrendsChart userId={userId} />
+          </div>
+        )}
 
         <div style={{ width: "100%" }}>
           <h2 style={{ fontSize: "12px", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "20px", color: "rgba(27,35,51,0.45)" }}>
@@ -308,6 +318,9 @@ export default function DashboardPage() {
                     <div style={{ padding: "0 24px 16px", marginTop: "-4px" }}>
                       <div style={{ borderRadius: "12px", padding: "16px", marginTop: "12px", background: "#ffffff", border: "1px solid rgba(27,35,51,0.07)", boxShadow: "0 4px 20px rgba(27,35,51,0.08)" }}>
                         <p style={{ fontSize: "12px", lineHeight: 1.6, whiteSpace: "pre-line", color: "rgba(27,35,51,0.8)", margin: 0 }}>{report.summary}</p>
+                        <p style={{ fontSize: "10.5px", color: "#B0B7C6", margin: "10px 0 0" }}>
+                          ⚠️ AI-generated summary — general information only, not a medical diagnosis. Consult a doctor for medical decisions.
+                        </p>
                       </div>
                     </div>
                   )}

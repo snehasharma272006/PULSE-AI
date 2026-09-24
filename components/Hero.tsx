@@ -49,8 +49,11 @@ export default function Hero() {
       </p>
 
       <div className="fade-up-3" style={{ marginTop: "2.25rem" }}>
-        <Link href="/upload" className="btn-primary cursor-pointer">
-          ↑ Upload Report
+        {/* Unauthenticated visitors land here first — this sends them to
+            login/signup; the middleware then routes signed-in users straight
+            into the app (upload page) so they never see this button twice. */}
+        <Link href="/login" className="btn-primary cursor-pointer">
+          Get Started →
         </Link>
       </div>
 

@@ -1,9 +1,17 @@
 "use client";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
@@ -11,6 +19,10 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // If the user was redirected here from a protected page, send them back
+  // to it after they successfully log in / sign up.
+  const nextPath = searchParams.get("next") || "/upload";
 
   const handleSubmit = async () => {
     setError("");
@@ -42,12 +54,12 @@ export default function LoginPage() {
       if (error) {
         setError(error.message.toLowerCase().includes("already registered") ? "Unable to create account with these details." : error.message);
       } else {
-        router.push("/upload");
+        router.push(nextPath);
       }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email: trimmedEmail, password });
       setError(error ? "Incorrect email or password." : "");
-      if (!error) router.push("/upload");
+      if (!error) router.push(nextPath);
     }
     setLoading(false);
   };

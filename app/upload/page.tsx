@@ -12,13 +12,94 @@ type Report = {
   summary: string | null;
 };
 
+// Stages of the pipeline a file goes through, each with a progress percentage
+// it should land on once that stage completes. Drives the real-time bar below.
+const STAGES: { key: string; label: string; percent: number }[] = [
+  { key: "uploading", label: "Uploading file...", percent: 40 },
+  { key: "analyzing", label: "Running AI analysis...", percent: 65 },
+  { key: "saving", label: "Saving report...", percent: 80 },
+  { key: "processing", label: "Extracting text & generating embeddings...", percent: 95 },
+  { key: "done", label: "Done!", percent: 100 },
+];
+
+// Blurry-image detection: downsamples the image onto a canvas, converts to
+// grayscale, and measures edge variance (a Laplacian-style sharpness check).
+// Low variance = few sharp edges = likely blurry/out of focus.
+async function isImageBlurry(file: File): Promise<boolean> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      try {
+        const size = 200; // downsample for speed
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return resolve(false);
+        ctx.drawImage(img, 0, 0, size, size);
+        const { data } = ctx.getImageData(0, 0, size, size);
+
+        const gray = new Float32Array(size * size);
+        for (let i = 0; i < size * size; i++) {
+          const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
+          gray[i] = 0.299 * r + 0.587 * g + 0.114 * b;
+        }
+
+        let sum = 0;
+        let sumSq = 0;
+        let count = 0;
+        for (let y = 1; y < size - 1; y++) {
+          for (let x = 1; x < size - 1; x++) {
+            const idx = y * size + x;
+            // simple Laplacian kernel
+            const lap =
+              4 * gray[idx] -
+              gray[idx - 1] -
+              gray[idx + 1] -
+              gray[idx - size] -
+              gray[idx + size];
+            sum += lap;
+            sumSq += lap * lap;
+            count++;
+          }
+        }
+        const mean = sum / count;
+        const variance = sumSq / count - mean * mean;
+
+        URL.revokeObjectURL(url);
+        resolve(variance < 90); // low variance ⇒ flag as blurry
+      } catch {
+        URL.revokeObjectURL(url);
+        resolve(false);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(false);
+    };
+    img.src = url;
+  });
+}
+
 export default function UploadPage() {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [stageLabel, setStageLabel] = useState("");
+  const [blurWarning, setBlurWarning] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null); // NEW: so failures are visible on screen, not just console
   const [recentUploads, setRecentUploads] = useState<Report[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+
+  const goToStage = (key: string) => {
+    const stage = STAGES.find((s) => s.key === key);
+    if (stage) {
+      setStageLabel(stage.label);
+      setProgress(stage.percent);
+    }
+  };
 
   useEffect(() => {
     const fetchReports = async () => {
@@ -44,19 +125,35 @@ export default function UploadPage() {
     if (!file) return;
     setUploading(true);
     setErrorMsg(null);
+    setBlurWarning(null);
+    setProgress(5);
+    setStageLabel("Checking file...");
 
     console.log("🚀 handleFile started for:", file.name); // NEW: confirms the function even fired
+
+    // Immediately flag blurry photos so the user can retake before we spend
+    // time uploading and analyzing a file that won't extract cleanly.
+    if (isImageFile(file)) {
+      const blurry = await isImageBlurry(file);
+      if (blurry) {
+        setBlurWarning(
+          "This photo looks blurry — text may not be readable. Continuing anyway, but a sharper photo will give better results."
+        );
+      }
+    }
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       console.error("❌ No logged-in user found, aborting upload.");
       setErrorMsg("You're not logged in. Please log in and try again.");
       setUploading(false);
+      setProgress(0);
       return;
     }
 
     const filePath = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_")}`;
 
+    goToStage("uploading");
     const { error: uploadError } = await supabase.storage
       .from("reports")
       .upload(filePath, file);
@@ -65,6 +162,7 @@ export default function UploadPage() {
       console.error("❌ Storage upload failed:", uploadError);
       setErrorMsg("File upload to storage failed. Check console.");
       setUploading(false);
+      setProgress(0);
       return;
     }
 
@@ -75,6 +173,7 @@ export default function UploadPage() {
     const isImage = isImageFile(file);
     let summary: string | null = null;
 
+    goToStage("analyzing");
     try {
       const aiFormData = new FormData();
       aiFormData.append("file", file);
@@ -94,6 +193,7 @@ export default function UploadPage() {
       console.error("❌ AI analysis request threw an error:", aiError);
     }
 
+    goToStage("saving");
     const { data: insertedReport, error: insertError } = await supabase
       .from("reports")
       .insert({
@@ -110,6 +210,7 @@ export default function UploadPage() {
       console.error("❌ Insert into 'reports' table failed:", insertError);
       setErrorMsg("Saving the report record failed. Check console for details.");
       setUploading(false);
+      setProgress(0);
       return; // stop here — don't redirect like nothing happened
     }
 
@@ -117,6 +218,7 @@ export default function UploadPage() {
 
     // NEW: RAG chunking + embeddings only make sense for PDFs, not images
     if (!isImage) {
+      goToStage("processing");
       try {
         const { data: { session } } = await supabase.auth.getSession();
 
@@ -124,6 +226,7 @@ export default function UploadPage() {
           console.error("❌ No active session/access_token — process-pdf call would fail auth.");
           setErrorMsg("Session expired. Please log in again.");
           setUploading(false);
+          setProgress(0);
           return;
         }
 
@@ -147,6 +250,7 @@ export default function UploadPage() {
           console.error("❌ PDF processing failed:", processPdfData.error);
           setErrorMsg(`PDF processing failed: ${processPdfData.error ?? "unknown error"}`);
           setUploading(false);
+          setProgress(0);
           return;
         }
 
@@ -169,6 +273,7 @@ export default function UploadPage() {
           console.error("❌ Embedding generation failed:", embedData.error);
           setErrorMsg(`Embedding generation failed: ${embedData.error ?? "unknown error"}`);
           setUploading(false);
+          setProgress(0);
           return;
         }
 
@@ -178,14 +283,16 @@ export default function UploadPage() {
         console.error("❌ Processing or embedding threw an error:", error);
         setErrorMsg("Something broke during PDF processing. Check console.");
         setUploading(false);
+        setProgress(0);
         return;
       }
     } else {
       console.log("ℹ️ Skipped process-pdf/generate-embeddings — file is an image, not a PDF.");
     }
 
+    goToStage("done");
     setUploading(false);
-    router.push("/dashboard");
+    setTimeout(() => router.push("/dashboard"), 400); // brief pause so the 100% bar is visible
   };
 
   const formatDate = (dateStr: string) => {
@@ -225,6 +332,38 @@ export default function UploadPage() {
             style={{ background: "rgba(220,38,38,0.08)", color: "#B91C1C", border: "1px solid rgba(220,38,38,0.2)" }}
           >
             {errorMsg}
+          </div>
+        )}
+
+        {/* Blurry-photo warning */}
+        {blurWarning && (
+          <div
+            className="rounded-lg px-4 py-3 mb-6 text-sm flex items-start gap-2"
+            style={{ background: "rgba(245,158,11,0.1)", color: "#92600A", border: "1px solid rgba(245,158,11,0.25)" }}
+          >
+            <span>📷</span>
+            <span>{blurWarning}</span>
+          </div>
+        )}
+
+        {/* Real-time upload progress bar */}
+        {uploading && (
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-medium" style={{ color: "var(--foreground)" }}>{stageLabel}</span>
+              <span className="text-xs font-semibold" style={{ color: "#5B8FC4" }}>{progress}%</span>
+            </div>
+            <div className="w-full rounded-full overflow-hidden" style={{ height: "8px", background: "rgba(91,143,196,0.12)" }}>
+              <div
+                style={{
+                  width: `${progress}%`,
+                  height: "100%",
+                  background: "linear-gradient(90deg, #5B8FC4, #3D6FA0)",
+                  transition: "width 0.4s ease",
+                  borderRadius: "999px",
+                }}
+              />
+            </div>
           </div>
         )}
 
