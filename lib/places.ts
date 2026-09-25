@@ -126,3 +126,90 @@ export async function findNearbyPlaces(query: NearbyPlacesQuery): Promise<Nearby
     .filter((p): p is NearbyPlace => p !== null)
     .sort((a, b) => a.distanceMeters - b.distanceMeters);
 }
+
+// ---------------------------------------------------------------------------
+// Offline / rate-limit fallback: cache the last-known results for a location
+// in Supabase (emergency_contacts_cache) so the locator still shows *something*
+// if Overpass is unreachable or rate-limited when it matters most.
+// ---------------------------------------------------------------------------
+
+import { supabase } from "@/lib/supabase";
+
+export type NearbyPlacesResult = {
+  places: NearbyPlace[];
+  source: "live" | "cache";
+  /** Set when source is "cache" — when that cached data was originally fetched. */
+  cachedAt?: string;
+};
+
+// Rounding lat/lng to 2 decimal places buckets nearby requests into the same
+// ~1.1km grid cell, so repeat visits to roughly the same spot hit the cache
+// instead of writing a near-duplicate row every time.
+const CACHE_GRID_PRECISION = 2;
+
+function cacheKey(lat: number, lng: number): { lat: number; lng: number } {
+  const factor = 10 ** CACHE_GRID_PRECISION;
+  return { lat: Math.round(lat * factor) / factor, lng: Math.round(lng * factor) / factor };
+}
+
+async function cachePlaces(lat: number, lng: number, radiusMeters: number, places: NearbyPlace[]) {
+  const key = cacheKey(lat, lng);
+  try {
+    await supabase.from("emergency_contacts_cache").insert({
+      lat: key.lat,
+      lng: key.lng,
+      radius_meters: radiusMeters,
+      places,
+    });
+  } catch {
+    // Caching is best-effort — a failed write should never break the live result.
+  }
+}
+
+async function readCachedPlaces(
+  lat: number,
+  lng: number
+): Promise<{ places: NearbyPlace[]; cachedAt: string } | null> {
+  const key = cacheKey(lat, lng);
+
+  const { data } = await supabase
+    .from("emergency_contacts_cache")
+    .select("places, fetched_at")
+    .eq("lat", key.lat)
+    .eq("lng", key.lng)
+    .order("fetched_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (data) return { places: data.places as NearbyPlace[], cachedAt: data.fetched_at as string };
+
+  // Nothing cached for this exact grid cell — fall back to whatever was most
+  // recently cached anywhere, so the user sees *something* rather than a dead end.
+  const { data: latest } = await supabase
+    .from("emergency_contacts_cache")
+    .select("places, fetched_at")
+    .order("fetched_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!latest) return null;
+  return { places: latest.places as NearbyPlace[], cachedAt: latest.fetched_at as string };
+}
+
+/**
+ * Same as findNearbyPlaces, but falls back to the Supabase cache if the live
+ * Overpass call fails (offline, rate-limited, etc.), and best-effort caches
+ * successful results for next time. Use this from the UI instead of calling
+ * findNearbyPlaces directly.
+ */
+export async function findNearbyPlacesWithCache(query: NearbyPlacesQuery): Promise<NearbyPlacesResult> {
+  try {
+    const places = await findNearbyPlaces(query);
+    void cachePlaces(query.lat, query.lng, query.radiusMeters ?? DEFAULT_RADIUS_METERS, places);
+    return { places, source: "live" };
+  } catch (err) {
+    const cached = await readCachedPlaces(query.lat, query.lng);
+    if (cached) return { places: cached.places, source: "cache", cachedAt: cached.cachedAt };
+    throw err;
+  }
+}
