@@ -37,6 +37,7 @@ type YearGroup = {
 export default function TimelinePage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,12 +47,16 @@ export default function TimelinePage() {
         setLoading(false);
         return;
       }
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("reports")
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
-      if (data) setReports(data);
+      if (error) {
+        setFetchError("Couldn't load your timeline. Try refreshing.");
+      } else if (data) {
+        setReports(data);
+      }
       setLoading(false);
     };
     fetchReports();
@@ -118,6 +123,8 @@ export default function TimelinePage() {
 
         {loading ? (
           <p style={{ fontSize: "14px", color: "rgba(27,35,51,0.35)" }}>Loading...</p>
+        ) : fetchError ? (
+          <p style={{ fontSize: "14px", color: "#B3452C" }}>{fetchError}</p>
         ) : groupedByYear.length === 0 ? (
           <p style={{ fontSize: "14px", color: "rgba(27,35,51,0.35)" }}>No records yet. Upload a report to get started.</p>
         ) : (

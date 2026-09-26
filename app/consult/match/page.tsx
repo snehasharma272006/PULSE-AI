@@ -40,6 +40,7 @@ function MatchPageContent() {
 
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loadingDoctors, setLoadingDoctors] = useState(false);
+  const [doctorsError, setDoctorsError] = useState<string | null>(null);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
 
@@ -72,12 +73,14 @@ function MatchPageContent() {
   useEffect(() => {
     if (!consultation) return;
     setLoadingDoctors(true);
+    setDoctorsError(null);
     getDoctors({
       specialty: specialty || undefined,
       region: region || undefined,
       availableToday: availableTodayOnly,
     })
       .then(setDoctors)
+      .catch(() => setDoctorsError("Couldn't load doctors right now. Try again in a moment."))
       .finally(() => setLoadingDoctors(false));
   }, [consultation, specialty, region, availableTodayOnly]);
 
@@ -192,6 +195,8 @@ function MatchPageContent() {
 
       {loadingDoctors ? (
         <p style={{ fontSize: "0.85rem", color: "var(--foreground)", opacity: 0.6 }}>Loading doctors…</p>
+      ) : doctorsError ? (
+        <p style={{ fontSize: "0.85rem", color: "#B3452C" }}>{doctorsError}</p>
       ) : doctors.length === 0 ? (
         <p style={{ fontSize: "0.85rem", color: "var(--foreground)", opacity: 0.6 }}>
           No doctors match these filters. Try widening your search.

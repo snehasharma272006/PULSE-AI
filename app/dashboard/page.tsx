@@ -22,6 +22,7 @@ type Report = {
 export default function DashboardPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -32,12 +33,16 @@ export default function DashboardPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setUserId(user.id);
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("reports")
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
-      if (data) setReports(data);
+      if (error) {
+        setFetchError("Couldn't load your recent activity. Try refreshing.");
+      } else if (data) {
+        setReports(data);
+      }
       setLoading(false);
     };
     fetchReports();
@@ -171,6 +176,49 @@ export default function DashboardPage() {
           </p>
         </div>
 
+        <div style={{ display: "flex", gap: "12px", marginBottom: "40px" }}>
+          <a
+            href="/emergency"
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              padding: "14px",
+              borderRadius: "12px",
+              textDecoration: "none",
+              background: "rgba(179,69,44,0.08)",
+              border: "1px solid rgba(179,69,44,0.25)",
+              color: "#B3452C",
+              fontSize: "14px",
+              fontWeight: 600,
+            }}
+          >
+            🚨 Emergency Help
+          </a>
+          <a
+            href="/consult"
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              padding: "14px",
+              borderRadius: "12px",
+              textDecoration: "none",
+              background: "rgba(47,122,77,0.08)",
+              border: "1px solid rgba(47,122,77,0.25)",
+              color: "#2F7A4D",
+              fontSize: "14px",
+              fontWeight: 600,
+            }}
+          >
+            🩺 Symptom Check
+          </a>
+        </div>
+
         <div
           style={{
             display: "grid",
@@ -220,6 +268,8 @@ export default function DashboardPage() {
           <div style={{ borderRadius: "16px", overflow: "visible", width: "100%", background: "rgba(255,255,255,0.65)", border: "1px solid rgba(27,35,51,0.08)" }}>
             {loading ? (
               <p style={{ fontSize: "14px", padding: "16px 20px", color: "rgba(27,35,51,0.35)" }}>Loading...</p>
+            ) : fetchError ? (
+              <p style={{ fontSize: "14px", padding: "16px 20px", color: "#B3452C" }}>{fetchError}</p>
             ) : reports.length === 0 ? (
               <p style={{ fontSize: "14px", padding: "16px 20px", color: "rgba(27,35,51,0.35)" }}>No activity yet. Upload a report!</p>
             ) : (
@@ -319,7 +369,7 @@ export default function DashboardPage() {
                       <div style={{ borderRadius: "12px", padding: "16px", marginTop: "12px", background: "#ffffff", border: "1px solid rgba(27,35,51,0.07)", boxShadow: "0 4px 20px rgba(27,35,51,0.08)" }}>
                         <p style={{ fontSize: "12px", lineHeight: 1.6, whiteSpace: "pre-line", color: "rgba(27,35,51,0.8)", margin: 0 }}>{report.summary}</p>
                         <p style={{ fontSize: "10.5px", color: "#B0B7C6", margin: "10px 0 0" }}>
-                          ⚠️ AI-generated summary — general information only, not a medical diagnosis. Consult a doctor for medical decisions.
+                          ⚠️ AI-generated summary :general information only, not a medical diagnosis. Consult a doctor for medical decisions.
                         </p>
                       </div>
                     </div>
