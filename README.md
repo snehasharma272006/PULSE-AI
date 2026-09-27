@@ -435,6 +435,7 @@ Doctor matching                 Emergency Locator
 ## Future Scope
 
 - **Telehealth Video Consults** — the current consultation flow matches patients to doctors by specialty, region, and availability; live video calling would need telehealth licensing compliance research before going past prototype.
+
 - **Full Ambulance Dispatch** — the Emergency Locator surfaces nearby help with one-tap calling and location sharing today; automated dispatch would depend on provider-specific APIs not yet integrated.
 
 
