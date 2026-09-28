@@ -1,34 +1,58 @@
-let embedder: any = null; // cached — model loads once per server instance, not per call
+// Embeddings via Google's Gemini API (no local model, so it works on Vercel).
+// Output size is 3072 numbers per text, which matches the Supabase column vector(3072).
 
-async function getEmbedder() {
-  if (!embedder) {
-    const { pipeline, env } = await import("@xenova/transformers");
-    env.cacheDir = "/tmp/transformers";
-    env.allowLocalModels = false;
-    embedder = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
-  }
-  return embedder;
-}
+const EMBEDDING_DIM = 3072;
+const GEMINI_MODEL = "gemini-embedding-001";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:embedContent`;
 
 const MAX_RETRIES = 3;
-const BASE_DELAY_MS = 500;
+const BASE_DELAY_MS = 1000;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getApiKey(): string {
+  const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!key) {
+    throw new Error("Missing Gemini API key: set GEMINI_API_KEY in your environment variables");
+  }
+  return key;
+}
+
 /**
  * Embed a single piece of text, retrying on transient failures
- * (e.g. model still loading) with exponential backoff.
+ * (e.g. rate limits) with exponential backoff.
  */
 export async function getEmbedding(text: string, retries = MAX_RETRIES): Promise<number[]> {
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const model = await getEmbedder();
-      const output = await model(text, { pooling: "mean", normalize: true });
-      const embedding = Array.from(output.data) as number[];
+      const res = await fetch(GEMINI_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": getApiKey(),
+        },
+        body: JSON.stringify({
+          model: `models/${GEMINI_MODEL}`,
+          content: { parts: [{ text }] },
+          outputDimensionality: EMBEDDING_DIM,
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`Gemini embedding API ${res.status}: ${body.slice(0, 300)}`);
+      }
+
+      const data = await res.json();
+      const embedding = data?.embedding?.values as number[] | undefined;
+
+      if (!Array.isArray(embedding) || embedding.length === 0) {
+        throw new Error("Gemini returned no embedding values");
+      }
 
       if (attempt === 0) {
         console.log(`✓ Embedding generated: ${embedding.length} dimensions`);
@@ -134,9 +158,9 @@ export function formatEmbeddingForDB(embedding: number[]): string {
 
 /**
  * Validate embedding dimensions match expected size.
- * 384 = Xenova/all-MiniLM-L6-v2's output size (was 768, Gemini's size).
+ * 3072 = Gemini embedding size, matching the Supabase column vector(3072).
  */
-export function validateEmbeddingDimension(embedding: number[], expectedDim: number = 384): boolean {
+export function validateEmbeddingDimension(embedding: number[], expectedDim: number = EMBEDDING_DIM): boolean {
   if (!Array.isArray(embedding)) return false;
   if (embedding.length !== expectedDim) {
     console.warn(`Warning: embedding dimension ${embedding.length} != expected ${expectedDim}`);
