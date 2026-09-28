@@ -1,9 +1,10 @@
-import { pipeline } from "@xenova/transformers";
-
 let embedder: any = null; // cached — model loads once per server instance, not per call
 
 async function getEmbedder() {
   if (!embedder) {
+    const { pipeline, env } = await import("@xenova/transformers");
+    env.cacheDir = "/tmp/transformers";
+    env.allowLocalModels = false;
     embedder = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
   }
   return embedder;

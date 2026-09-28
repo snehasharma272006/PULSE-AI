@@ -8,7 +8,13 @@ const supabase = createClient(
 );
 
 export async function retrieveChunks(state: typeof GraphState.State) {
-  const queryEmbedding = await getEmbedding(state.question);
+  let queryEmbedding: number[];
+  try {
+    queryEmbedding = await getEmbedding(state.question, 0);
+  } catch (e) {
+    console.error("Embedding failed, answering without report context", e);
+    return { chunks: [] };
+  }
 
   let q = supabase
     .from("report_chunks")
