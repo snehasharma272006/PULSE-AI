@@ -291,6 +291,8 @@ pulse-ai/
 ```
 
 
+
+
 ##  Deployment (Vercel — Free)
 
 1. Push to GitHub
@@ -337,6 +339,8 @@ The summary call is constrained to a strict schema so the dashboard can render r
 }
 ```
 
+
+
 `key_metrics` becomes a shared data source that the chatbot's trend/comparison nodes query directly — no need to re-parse raw PDF text on every chat turn.
 
 ### 2. Chatbot — Agentic RAG (LangGraph)
@@ -344,7 +348,7 @@ The summary call is constrained to a strict schema so the dashboard can render r
 Unlike the upload pipeline, chat has open-ended user intent, so this is where the actual "agent" behavior lives: an LLM node classifies the query, then routes it down one of several paths.
 
 ```
-User Query
+User Query  
     │
     ▼
 [Classify Intent]  ← LLM decides the path
@@ -361,6 +365,8 @@ User Query
                               [Compose Final Answer] → stream to user
 ```
 
+
+
 **Design decisions worth knowing:**
 - **LangGraph** owns routing and looping — the actual "agentic" part of the system.
 - **LangChain** (used internally, optional by design) handles retrieval/prompt plumbing inside individual nodes.
@@ -372,17 +378,21 @@ User Query
 Same philosophy as the upload pipeline: no LLM decides urgency or medical routing. `lib/triage.ts` scores a fixed symptom checklist against a small red-flag rule set and a weighted-points system, always producing the same output for the same input.
 
 ```
+
+
 Symptom intake form
    ↓
 triage() — red flags checked first, then weighted score
    ↓
-routine / urgent  ──────────────→  critical
+routine / urgent  ──────────────→  critical    
    ↓                                  ↓
 Doctor matching                 Emergency Locator
 (specialty + region + availability)  (Overpass lookup, call, share location)
 ```
 
 ### Node Layer — Callable Tools (mini API reference)
+
+
 
 | Node / Tool | Signature | Purpose |
 
@@ -396,13 +406,18 @@ Doctor matching                 Emergency Locator
 
 ### What Changed vs. the Original RAG Version
 
-| Component | After |
+| Component | After |. 
 
 | Upload → Summary | Structured JSON output (still a deterministic pipeline, no agent) |
+
 | Chatbot | Agentic RAG via LangGraph (route → retrieve/compute → compose) |
+
 | Trend/Comparison logic | Dedicated LangGraph nodes, deterministic computation underneath |
+
 | Retrieval (pgvector, local embeddings)| reused as a tool inside LangGraph nodes |
+
 | Symptom Triage & Emergency Locator | New deterministic feature set — urgency scoring, doctor matching, Overpass-based locator |
+
 
 
 **CHANGES**
@@ -424,6 +439,8 @@ Doctor matching                 Emergency Locator
 - **Overpass API** — OpenStreetMap's public query endpoint for geodata (hospitals, pharmacies, clinics), used for the Emergency Locator with no API key or billing required
 
 
+
+
 ## Security
 
 - Row-Level Security (RLS) — users can only ever see their own data
@@ -431,6 +448,8 @@ Doctor matching                 Emergency Locator
 - No secrets committed to code — all via environment variables
 - Service Role Key is backend-only
 - PDF-only uploads, with size limits
+
+
 
 ## Future Scope
 
