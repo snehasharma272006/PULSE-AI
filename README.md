@@ -3,6 +3,7 @@
 AI-powered medical record management with **agentic RAG** (retrieval-augmented generation orchestrated by LangGraph), streaming chat, and health trends visualization.
 
 
+
 ##  Features
 
 ###  Agentic RAG System (LangGraph-Orchestrated)
@@ -13,11 +14,15 @@ AI-powered medical record management with **agentic RAG** (retrieval-augmented g
 - **Intent-Routed Chat** — a LangGraph agent classifies each user query and routes it to the right node: plain RAG retrieval, trend lookup, report comparison, or a multi-step chain for compound questions
 - **Source Citations** — every AI answer links back to the exact chunk + report it came from
 
+
+
 ### Streaming Chat
 - **Real-time typing effect** — responses stream token-by-token, ChatGPT-style
 - **Agentic, RAG-grounded answers** — the graph retrieves, computes, or compares before composing a final answer
 - **Citation cards** — see exactly which source the AI pulled from
 - **Multi-report support** — chat about one specific report or your entire history
+
+
 
 ### Symptom Triage & Doctor Consultation
 - **Deterministic urgency triage** (`lib/triage.ts`) — plain weighted scoring against a symptom checklist, no LLM in this path, so the same input always produces the same output. A small red-flag rule set (crushing chest pain, unconsciousness, severe uncontrolled bleeding, and similar) forces a critical verdict on its own, independent of the score
@@ -25,20 +30,28 @@ AI-powered medical record management with **agentic RAG** (retrieval-augmented g
 - **Doctor matching** — routine and urgent cases route to `app/consult/match`, which filters doctors by specialty, region, and today's availability, and recommends a specialty automatically based on reported symptoms
 - **Critical short-circuit** — a critical result skips doctor matching and routes straight to the Emergency Locator, with a safety net that redirects even if the matching page is opened directly
 
+
+
 ### Emergency Locator
 - **Geolocation-based lookup** of nearby hospitals, pharmacies, and clinics via OpenStreetMap's Overpass API — a public endpoint, no API key or billing required
 - **One-tap calling** (`tel:` link) and **location sharing** (native share sheet, with a copy-link fallback)
 - **Offline/rate-limit resilience** — results are cached in Supabase (`emergency_contacts_cache`), so the locator still shows something if the live Overpass call fails
 
+
+
 ### Design System
 - Clean, monochromatic blue palette with a soft gradient background
 - **Instrument Serif (italic)** for headings — gives the product an editorial, premium feel instead of the generic SaaS look
+
+
 
 ### Production Ready
 - Full **TypeScript** coverage
 - **Jest** test suite + **GitHub Actions** CI/CD on every push
 - Graceful error handling with clear user feedback
 - **Supabase Auth** with Row-Level Security (RLS)
+
+
 
 ## Zero-Cost Tech Stack
 
@@ -56,10 +69,12 @@ AI-powered medical record management with **agentic RAG** (retrieval-augmented g
 | Hosting | Vercel
 
 
+
 ### Prerequisites
 - Node.js 18+
 - Supabase account 
 - Google Gemini API key
+
 
 ### Installation
 
@@ -107,8 +122,10 @@ CREATE TABLE report_chunks (
   created_at TIMESTAMP DEFAULT now()
 );
 
+
 ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE report_chunks ENABLE ROW LEVEL SECURITY;
+
 
 CREATE POLICY "users_access_own_reports"
   ON reports FOR ALL USING (auth.uid() = user_id);
@@ -121,6 +138,8 @@ CREATE INDEX ON report_chunks USING ivfflat
 ```
 
 **Storage bucket:** Supabase Dashboard → Storage → create `medical-reports` (Private)
+
+
 
 ### Triage / Emergency Locator tables
 
@@ -175,6 +194,8 @@ CREATE POLICY "anyone_reads_cache"
   ON emergency_contacts_cache FOR SELECT USING (true);
 ```
 
+
+
 ## API Routes
 
 | Endpoint | Method | Purpose |
@@ -186,6 +207,7 @@ CREATE POLICY "anyone_reads_cache"
 | `/api/chat` | POST | Streaming AI chat — internally runs the LangGraph agent (intent classification → retrieval/computation → composition) |
 
 ### Example: Upload → Process → Chat
+
 
 ```typescript
 // 1. Upload
@@ -220,6 +242,7 @@ while (true) {
   // render chunk to UI
 }
 ```
+
 
 
 ## Testing
