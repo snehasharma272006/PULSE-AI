@@ -17,6 +17,7 @@ AI-powered medical record management with **agentic RAG** (retrieval-augmented g
 
 
 ### Streaming Chat
+
 - **Real-time typing effect** — responses stream token-by-token, ChatGPT-style
 - **Agentic, RAG-grounded answers** — the graph retrieves, computes, or compares before composing a final answer
 - **Citation cards** — see exactly which source the AI pulled from
@@ -78,6 +79,7 @@ AI-powered medical record management with **agentic RAG** (retrieval-augmented g
 
 ### Installation
 
+
 ```bash
 git clone https://github.com/YOUR_USERNAME/pulse-ai.git
 cd pulse-ai
@@ -91,6 +93,7 @@ GEMINI_API_KEY=your_gemini_api_key
 EOF
 
 npm run dev
+
 ```
 
 Visit `http://localhost:3000/login` 
